@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <style>
+      .box { fill: #ffffff; stroke: #2c3e50; stroke-width: 2; }
+      .title-box { fill: #3498db; stroke: #2c3e50; stroke-width: 2; }
+      .inner-box { fill: #ecf0f1; stroke: #34495e; stroke-width: 1.5; }
+      .contract-box { fill: #e8f4f8; stroke: #3498db; stroke-width: 1.5; }
+      .text-title { fill: #ffffff; font-family: 'Arial', sans-serif; font-size: 16px; font-weight: bold; }
+      .text-normal { fill: #2c3e50; font-family: 'Arial', sans-serif; font-size: 14px; }
+      .text-small { fill: #34495e; font-family: 'Arial', sans-serif; font-size: 12px; }
+      .arrow { stroke: #e74c3c; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .arrow-bi { stroke: #e74c3c; stroke-width: 2; fill: none; marker-end: url(#arrowhead); marker-start: url(#arrowhead-start); }
+      .connection { stroke: #7f8c8d; stroke-width: 2; fill: none; stroke-dasharray: 5,5; }
+    </style>
+    
+    <!-- 箭头标记 -->
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#e74c3c" />
+    </marker>
+    <marker id="arrowhead-start" markerWidth="10" markerHeight="10" refX="1" refY="3" orient="auto">
+      <polygon points="10 0, 0 3, 10 6" fill="#e74c3c" />
+    </marker>
+  </defs>
+  
+  <!-- 标题 -->
+  <text x="400" y="30" text-anchor="middle" style="fill: #2c3e50; font-family: 'Arial', sans-serif; font-size: 20px; font-weight: bold;">UniswapV3 开发环境架构</text>
+  
+  <!-- 用户浏览器层 -->
+  <rect x="50" y="60" width="700" height="150" rx="10" class="box"/>
+  <rect x="50" y="60" width="700" height="35" rx="10" class="title-box"/>
+  <text x="400" y="83" text-anchor="middle" class="text-title">用户浏览器（Browser）</text>
+  
+  <!-- React UI -->
+  <rect x="100" y="120" width="250" height="70" rx="5" class="inner-box"/>
+  <text x="225" y="145" text-anchor="middle" class="text-normal">React UI</text>
+  <text x="225" y="165" text-anchor="middle" class="text-small">（前端界面）</text>
+  
+  <!-- MetaMask -->
+  <rect x="450" y="120" width="250" height="70" rx="5" class="inner-box"/>
+  <text x="575" y="145" text-anchor="middle" class="text-normal">MetaMask</text>
+  <text x="575" y="165" text-anchor="middle" class="text-small">（钱包插件）</text>
+  
+  <!-- React ↔ MetaMask 连接 -->
+  <line x1="350" y1="155" x2="450" y2="155" class="arrow-bi"/>
+  
+  <!-- Ethers.js 标签 -->
+  <text x="400" y="235" text-anchor="middle" class="text-small" style="fill: #7f8c8d;">Ethers.js (Web3库)</text>
+  
+  <!-- 浏览器到节点的连接 -->
+  <line x1="225" y1="210" x2="225" y2="260" class="connection"/>
+  <line x1="575" y1="210" x2="575" y2="260" class="connection"/>
+  
+  <!-- 本地以太坊节点层 -->
+  <rect x="50" y="260" width="700" height="230" rx="10" class="box"/>
+  <rect x="50" y="260" width="700" height="35" rx="10" class="title-box"/>
+  <text x="400" y="283" text-anchor="middle" class="text-title">本地以太坊节点（Anvil）</text>
+  
+  <!-- EVM 容器 -->
+  <rect x="100" y="315" width="600" height="155" rx="5" class="inner-box"/>
+  <text x="400" y="340" text-anchor="middle" class="text-normal">EVM（以太坊虚拟机）</text>
+  
+  <!-- 合约容器 -->
+  <rect x="150" y="355" width="500" height="100" rx="5" class="contract-box"/>
+  <text x="400" y="378" text-anchor="middle" class="text-small" style="fill: #2980b9;">智能合约</text>
+  
+  <!-- 合约列表 -->
+  <text x="180" y="405" class="text-small">• UniswapV3Pool.sol</text>
+  <text x="180" y="425" class="text-small">• UniswapV3Factory.sol</text>
+  <text x="180" y="445" class="text-small">• Libraries...</text>
+  
+  <text x="450" y="405" class="text-small">• ERC20 Tokens</text>
+  <text x="450" y="425" class="text-small">• Position Manager</text>
+  <text x="450" y="445" class="text-small">• Router</text>
+  
+  <!-- 节点到工具的连接 -->
+  <line x1="400" y1="490" x2="400" y2="520" class="arrow"/>
+  <text x="420" y="510" class="text-small" style="fill: #7f8c8d;">Forge (测试/部署)</text>
+  
+  <!-- 开发工具层 -->
+  <rect x="50" y="520" width="700" height="60" rx="10" class="box"/>
+  <rect x="50" y="520" width="700" height="35" rx="10" class="title-box"/>
+  <text x="400" y="543" text-anchor="middle" class="text-title">开发工具（Foundry）</text>
+  
+  <!-- 工具列表 -->
+  <text x="150" y="565" class="text-small">• Forge: 测试框架</text>
+  <text x="350" y="565" class="text-small">• Anvil: 本地节点</text>
+  <text x="550" y="565" class="text-small">• Cast: CLI工具</text>
+</svg>

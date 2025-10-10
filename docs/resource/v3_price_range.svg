@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 450" width="600" height="450">
+  <!-- 定义样式 -->
+  <defs>
+    <style>
+      .axis { stroke: #333; stroke-width: 2; fill: none; }
+      .axis-arrow { fill: #333; }
+      .curve { stroke: #8B5CF6; stroke-width: 3; fill: none; }
+      .boundary-line { stroke: #EF4444; stroke-width: 2; stroke-dasharray: 5,5; }
+      .label { font-family: 'Arial', sans-serif; font-size: 18px; fill: #333; }
+      .label-small { font-family: 'Arial', sans-serif; font-size: 14px; fill: #666; }
+      .point { fill: #EF4444; }
+      .grid { stroke: #E5E7EB; stroke-width: 1; }
+    </style>
+  </defs>
+  
+  <!-- 背景 -->
+  <rect width="600" height="450" fill="#FAFAFA"/>
+  
+  <!-- 网格线 -->
+  <line x1="80" y1="50" x2="80" y2="370" class="grid"/>
+  <line x1="50" y1="370" x2="550" y2="370" class="grid"/>
+  
+  <!-- Y 轴 -->
+  <line x1="80" y1="400" x2="80" y2="30" class="axis"/>
+  <polygon points="80,25 75,35 85,35" class="axis-arrow"/>
+  <text x="50" y="35" class="label">y</text>
+  <text x="25" y="385" class="label-small">(token1)</text>
+  
+  <!-- X 轴 -->
+  <line x1="50" y1="370" x2="570" y2="370" class="axis"/>
+  <polygon points="575,370 565,365 565,375" class="axis-arrow"/>
+  <text x="540" y="400" class="label">x</text>
+  <text x="490" y="415" class="label-small">(token0)</text>
+  
+  <!-- 原点标记 -->
+  <text x="60" y="390" class="label-small">0</text>
+  
+  <!-- 绘制双曲线片段 (y = k/x 的一部分) -->
+  <path d="M 120,320 Q 180,220 240,160 T 400,80 T 500,50" class="curve"/>
+  
+  <!-- 边界点 a (下限) -->
+  <circle cx="120" cy="320" r="5" class="point"/>
+  <text x="100" y="340" class="label" fill="#EF4444">a</text>
+  
+  <!-- 边界点 b (上限) -->
+  <circle cx="500" cy="50" r="5" class="point"/>
+  <text x="510" y="50" class="label" fill="#EF4444">b</text>
+  
+  <!-- 从边界点到坐标轴的虚线 -->
+  <line x1="120" y1="320" x2="120" y2="370" class="boundary-line"/>
+  <line x1="120" y1="320" x2="80" y2="320" class="boundary-line"/>
+  
+  <line x1="500" y1="50" x2="500" y2="370" class="boundary-line"/>
+  <line x1="500" y1="50" x2="80" y2="50" class="boundary-line"/>
+  
+  <!-- 坐标轴上的边界标记 -->
+  <line x1="120" y1="365" x2="120" y2="375" class="axis" stroke-width="2"/>
+  <line x1="500" y1="365" x2="500" y2="375" class="axis" stroke-width="2"/>
+  
+  <line x1="75" y1="320" x2="85" y2="320" class="axis" stroke-width="2"/>
+  <line x1="75" y1="50" x2="85" y2="50" class="axis" stroke-width="2"/>
+  
+  <!-- 价格区间标注 -->
+  <text x="280" y="420" class="label-small" fill="#8B5CF6" font-weight="bold">价格区间 [a, b]</text>
+  
+  <!-- 曲线方程标注 -->
+  <text x="380" y="120" class="label-small" fill="#8B5CF6" font-style="italic">x · y = k</text>
+  
+  <!-- 说明文字 -->
+  <rect x="50" y="10" width="500" height="15" fill="white" opacity="0.9"/>
+  <text x="300" y="22" class="label-small" text-anchor="middle" fill="#666">
+    Uniswap V3 价格区间：有限的流动性曲线
+  </text>
+  
+  <!-- 箭头指示活跃交易区域 -->
+  <path d="M 200,280 L 180,300" stroke="#10B981" stroke-width="2" fill="none" marker-end="url(#arrowgreen)"/>
+  <text x="210" y="275" class="label-small" fill="#10B981">活跃区间</text>
+  
+  <!-- 定义绿色箭头 -->
+  <defs>
+    <marker id="arrowgreen" markerWidth="10" markerHeight="10" refX="5" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#10B981"/>
+    </marker>
+  </defs>
+  
+  <!-- 边界外的阴影区域表示"无流动性" -->
+  <rect x="80" y="50" width="40" height="320" fill="#FEE2E2" opacity="0.3"/>
+  <rect x="500" y="50" width="50" height="320" fill="#FEE2E2" opacity="0.3"/>
+  
+  <text x="95" y="200" class="label-small" fill="#DC2626" transform="rotate(-90 95 200)">无流动性</text>
+  <text x="520" y="200" class="label-small" fill="#DC2626" transform="rotate(-90 520 200)">无流动性</text>
+</svg>
+
+
