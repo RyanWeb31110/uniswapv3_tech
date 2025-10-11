@@ -14,7 +14,6 @@ CLAUDE.md
 .claude/
 .claude/*
 
-lib/
 lib/openzeppelin-contracts
 AGENTS.md
 AGENTS copy.md
