@@ -23,7 +23,7 @@
   - 技术细节说明
 
 #### 📚 文档更新
-- ✅ **docs/1FirstSwap/05-第一次交换：流动性计算.md** - 优化内容
+- ✅ **docs/1FirstSwap/05-流动性计算.md** - 优化内容
   - 将 LaTeX 数学公式改为通用格式
   - 优化第四章"流动性参数 L 的计算"的逻辑结构
   - 添加 SVG 图片替代 ASCII 艺术图
@@ -109,8 +109,8 @@ python scripts/test_unimath.py
 uniswapv3_tech/
 ├── docs/
 │   ├── 0Backendground/          # 背景知识（4篇）
-│   ├── 1FirstSwap/               # 第一次交换
-│   │   ├── 05-第一次交换：流动性计算.md
+│   ├── 1FirstSwap/               # 第一次Swap
+│   │   ├── 05-流动性计算.md
 │   │   └── README.md             # 章节导读（新增）
 │   └── resource/                 # 图片资源
 ├── scripts/                      # Python 工具（新增）

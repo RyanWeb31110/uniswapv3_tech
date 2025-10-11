@@ -300,7 +300,7 @@ L_y = Δy / (√P_c - √P_a)
 
 ## 📖 相关文档
 
-- [05-第一次交换：流动性计算.md](../docs/1FirstSwap/05-第一次交换：流动性计算.md)
+- [05-流动性计算.md](../docs/1FirstSwap/05-流动性计算.md)
 - [Uniswap V3 Development Book](https://uniswapv3book.com/)
 - [Uniswap V3 白皮书](https://uniswap.org/whitepaper-v3.pdf)
 

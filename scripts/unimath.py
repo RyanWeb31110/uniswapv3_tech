@@ -6,7 +6,7 @@ Uniswap V3 数学计算工具
 使用方法:
     python scripts/unimath.py
 
-参考文档: docs/1FirstSwap/05-第一次交换：流动性计算.md
+参考文档: docs/1FirstSwap/05-流动性计算.md
 """
 
 import math

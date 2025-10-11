@@ -82,10 +82,10 @@ python3 scripts/test_unimath.py
 2. **学习流动性计算**（当前重点）
    ```bash
    # 阅读文章
-   open docs/1FirstSwap/05-第一次交换：流动性计算.md
+   open docs/1FirstSwap/05-流动性计算.md
    
    # 或在终端中使用 cat/less
-   cat docs/1FirstSwap/05-第一次交换：流动性计算.md
+   cat docs/1FirstSwap/05-流动性计算.md
    ```
 
 3. **动手实践**
@@ -97,7 +97,7 @@ python3 scripts/test_unimath.py
 
 #### 方式 1：边读边练（推荐）
 
-1. 打开文章：`docs/1FirstSwap/05-第一次交换：流动性计算.md`
+1. 打开文章：`docs/1FirstSwap/05-流动性计算.md`
 2. 同时打开终端，准备运行 Python 工具
 3. 阅读到计算部分时，使用工具验证结果
 4. 尝试修改参数，观察结果变化
@@ -165,7 +165,7 @@ forge test --match-test testMint -vvv
 | 文档 | 说明 |
 |------|------|
 | [docs/1FirstSwap/README.md](docs/1FirstSwap/README.md) | 第一章导读 |
-| [docs/1FirstSwap/05-第一次交换：流动性计算.md](docs/1FirstSwap/05-第一次交换：流动性计算.md) | 流动性计算详解 |
+| [docs/1FirstSwap/05-流动性计算.md](docs/1FirstSwap/05-流动性计算.md) | 流动性计算详解 |
 
 ### 工具文档
 

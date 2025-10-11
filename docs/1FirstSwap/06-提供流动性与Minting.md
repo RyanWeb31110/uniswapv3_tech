@@ -2,7 +2,7 @@
 
 ## 系列文章导航
 
-本文是 UniswapV3 技术学习系列的第六篇，属于"里程碑 1：第一次交换"模块。在完成了 AMM 原理学习和流动性数学计算后，本文将进入实战阶段：使用 Solidity 实现 UniswapV3Pool 核心合约，完成流动性提供（Minting）功能，并使用 Foundry 框架编写完整的测试用例。通过本文，您将掌握核心合约的架构设计、Tick 和 Position 管理机制，以及回调模式的实现原理。
+本文是 UniswapV3 技术学习系列的第六篇，属于"里程碑 1：第一次Swap"模块。在完成了 AMM 原理学习和流动性数学计算后，本文将进入实战阶段：使用 Solidity 实现 UniswapV3Pool 核心合约，完成流动性提供（Minting）功能，并使用 Foundry 框架编写完整的测试用例。通过本文，您将掌握核心合约的架构设计、Tick 和 Position 管理机制，以及回调模式的实现原理。
 
 > **原文链接：** [Providing Liquidity - Uniswap V3 Development Book](https://uniswapv3book.com/milestone_1/providing-liquidity.html)
 
