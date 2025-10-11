@@ -69,7 +69,7 @@ contract UniswapV3PoolTest is Test {
     ///      4. 池子验证余额是否增加
     /// @param amount0 池子要求的 token0 数量
     /// @param amount1 池子要求的 token1 数量
-    function uniswapV3MintCallback(uint256 amount0, uint256 amount1) public {
+    function uniswapV3MintCallback(uint256 amount0, uint256 amount1, bytes calldata /* data */) public {
         // 根据标志决定是否转账（用于测试不同场景）
         if (shouldTransferInCallback) {
             token0.transfer(msg.sender, amount0); // msg.sender 是池子合约
@@ -81,7 +81,9 @@ contract UniswapV3PoolTest is Test {
     /// @dev 在回调中转入输入代币
     /// @param amount0Delta token0 的数量变化
     /// @param amount1Delta token1 的数量变化
-    function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta) public {
+    function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata /* data */)
+        public
+    {
         // amount0Delta < 0: 我们收到 token0（池子输出）
         // amount0Delta > 0: 我们需要支付 token0（池子输入）
         if (amount0Delta > 0) {
@@ -118,8 +120,16 @@ contract UniswapV3PoolTest is Test {
 
         // 4. 如果需要，mint 流动性
         if (params.mintLiquidity) {
+            // 编码回调数据
+            bytes memory data = abi.encode(
+                UniswapV3Pool.CallbackData({
+                    token0: address(token0),
+                    token1: address(token1),
+                    payer: address(this)
+                })
+            );
             (poolBalance0, poolBalance1) =
-                pool.mint(address(this), params.lowerTick, params.upperTick, params.liquidity);
+                pool.mint(address(this), params.lowerTick, params.upperTick, params.liquidity, data);
         }
     }
 
@@ -195,9 +205,18 @@ contract UniswapV3PoolTest is Test {
 
         setupTestCase(params);
 
+        // 编码回调数据
+        bytes memory data = abi.encode(
+            UniswapV3Pool.CallbackData({
+                token0: address(token0),
+                token1: address(token1),
+                payer: address(this)
+            })
+        );
+
         // 期望交易回滚
         vm.expectRevert(UniswapV3Pool.InvalidTickRange.selector);
-        pool.mint(address(this), params.lowerTick, params.upperTick, params.liquidity);
+        pool.mint(address(this), params.lowerTick, params.upperTick, params.liquidity, data);
     }
 
     /// @notice 测试下限 Tick 超出范围
@@ -216,8 +235,17 @@ contract UniswapV3PoolTest is Test {
 
         setupTestCase(params);
 
+        // 编码回调数据
+        bytes memory data = abi.encode(
+            UniswapV3Pool.CallbackData({
+                token0: address(token0),
+                token1: address(token1),
+                payer: address(this)
+            })
+        );
+
         vm.expectRevert(UniswapV3Pool.InvalidTickRange.selector);
-        pool.mint(address(this), params.lowerTick, params.upperTick, params.liquidity);
+        pool.mint(address(this), params.lowerTick, params.upperTick, params.liquidity, data);
     }
 
     /// @notice 测试上限 Tick 超出范围
@@ -236,8 +264,17 @@ contract UniswapV3PoolTest is Test {
 
         setupTestCase(params);
 
+        // 编码回调数据
+        bytes memory data = abi.encode(
+            UniswapV3Pool.CallbackData({
+                token0: address(token0),
+                token1: address(token1),
+                payer: address(this)
+            })
+        );
+
         vm.expectRevert(UniswapV3Pool.InvalidTickRange.selector);
-        pool.mint(address(this), params.lowerTick, params.upperTick, params.liquidity);
+        pool.mint(address(this), params.lowerTick, params.upperTick, params.liquidity, data);
     }
 
     /// @notice 测试零流动性
@@ -256,8 +293,17 @@ contract UniswapV3PoolTest is Test {
 
         setupTestCase(params);
 
+        // 编码回调数据
+        bytes memory data = abi.encode(
+            UniswapV3Pool.CallbackData({
+                token0: address(token0),
+                token1: address(token1),
+                payer: address(this)
+            })
+        );
+
         vm.expectRevert(UniswapV3Pool.ZeroLiquidity.selector);
-        pool.mint(address(this), params.lowerTick, params.upperTick, params.liquidity);
+        pool.mint(address(this), params.lowerTick, params.upperTick, params.liquidity, data);
     }
 
     /// @notice 测试未转账代币的情况
@@ -276,8 +322,17 @@ contract UniswapV3PoolTest is Test {
 
         setupTestCase(params);
 
+        // 编码回调数据
+        bytes memory data = abi.encode(
+            UniswapV3Pool.CallbackData({
+                token0: address(token0),
+                token1: address(token1),
+                payer: address(this)
+            })
+        );
+
         vm.expectRevert(UniswapV3Pool.InsufficientInputAmount.selector);
-        pool.mint(address(this), params.lowerTick, params.upperTick, params.liquidity);
+        pool.mint(address(this), params.lowerTick, params.upperTick, params.liquidity, data);
     }
 
     // ============ 测试用例：事件验证 ============
@@ -298,6 +353,15 @@ contract UniswapV3PoolTest is Test {
 
         setupTestCase(params);
 
+        // 编码回调数据
+        bytes memory data = abi.encode(
+            UniswapV3Pool.CallbackData({
+                token0: address(token0),
+                token1: address(token1),
+                payer: address(this)
+            })
+        );
+
         // 期望触发 Mint 事件
         vm.expectEmit(true, true, true, true);
         emit Mint(
@@ -310,7 +374,7 @@ contract UniswapV3PoolTest is Test {
             5000 ether
         );
 
-        pool.mint(address(this), params.lowerTick, params.upperTick, params.liquidity);
+        pool.mint(address(this), params.lowerTick, params.upperTick, params.liquidity, data);
     }
 
     // ============ 测试用例：Swap 功能 ============
@@ -345,7 +409,16 @@ contract UniswapV3PoolTest is Test {
 
         // ==================== 步骤 3: 执行交换 ====================
 
-        (int256 amount0Delta, int256 amount1Delta) = pool.swap(address(this));
+        // 编码回调数据
+        bytes memory swapData = abi.encode(
+            UniswapV3Pool.CallbackData({
+                token0: address(token0),
+                token1: address(token1),
+                payer: address(this)
+            })
+        );
+
+        (int256 amount0Delta, int256 amount1Delta) = pool.swap(address(this), swapData);
 
         // ==================== 步骤 4: 验证交换数量 ====================
 

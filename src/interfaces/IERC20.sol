@@ -14,4 +14,19 @@ interface IERC20 {
     /// @param amount 转账数量
     /// @return 是否转账成功
     function transfer(address recipient, uint256 amount) external returns (bool);
+
+    /// @notice 授权第三方使用代币
+    /// @param spender 被授权的地址
+    /// @param amount 授权的数量
+    /// @return 是否授权成功
+    function approve(address spender, uint256 amount) external returns (bool);
+
+    /// @notice 从授权账户转账代币
+    /// @param sender 代币发送者地址
+    /// @param recipient 代币接收者地址
+    /// @param amount 转账数量
+    /// @return 是否转账成功
+    function transferFrom(address sender, address recipient, uint256 amount)
+        external
+        returns (bool);
 }

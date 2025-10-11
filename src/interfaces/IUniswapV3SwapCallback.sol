@@ -9,5 +9,7 @@ interface IUniswapV3SwapCallback {
     /// @dev 在回调中，调用者需要将输入代币转入池子
     /// @param amount0Delta token0 的数量变化（正数表示池子需要接收，负数表示池子需要发送）
     /// @param amount1Delta token1 的数量变化（正数表示池子需要接收，负数表示池子需要发送）
-    function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta) external;
+    /// @param data swap 函数调用时传递的额外数据
+    function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data)
+        external;
 }

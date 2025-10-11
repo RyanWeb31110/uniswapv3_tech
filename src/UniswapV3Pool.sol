@@ -17,6 +17,19 @@ contract UniswapV3Pool {
     using Position for mapping(bytes32 => Position.Info);
     using Position for Position.Info;
 
+    // ============ 数据结构 ============
+
+    /// @notice 回调函数的额外数据结构
+    /// @dev 使用 abi.encode 编码后传递给回调函数
+    struct CallbackData {
+        /// @notice 池中的 token0 地址
+        address token0;
+        /// @notice 池中的 token1 地址
+        address token1;
+        /// @notice 支付代币的用户地址
+        address payer;
+    }
+
     // ============ 常量 ============
 
     /// @notice 最小 Tick 索引
@@ -102,12 +115,16 @@ contract UniswapV3Pool {
     /// @param lowerTick 价格区间下限
     /// @param upperTick 价格区间上限
     /// @param amount 要添加的流动性数量（L）
+    /// @param data 回调函数的额外数据（编码后的 CallbackData）
     /// @return amount0 实际存入的 token0 数量
     /// @return amount1 实际存入的 token1 数量
-    function mint(address owner, int24 lowerTick, int24 upperTick, uint128 amount)
-        external
-        returns (uint256 amount0, uint256 amount1)
-    {
+    function mint(
+        address owner,
+        int24 lowerTick,
+        int24 upperTick,
+        uint128 amount,
+        bytes calldata data
+    ) external returns (uint256 amount0, uint256 amount1) {
         // ==================== C: CHECK（检查）====================
         // 步骤 1: 验证参数
         if (lowerTick >= upperTick || lowerTick < MIN_TICK || upperTick > MAX_TICK) {
@@ -149,8 +166,8 @@ contract UniswapV3Pool {
         if (amount0 > 0) balance0Before = balance0();
         if (amount1 > 0) balance1Before = balance1();
 
-        // 调用回调函数 - 调用者必须实现此接口
-        IUniswapV3MintCallback(msg.sender).uniswapV3MintCallback(amount0, amount1);
+        // 调用回调函数 - 调用者必须实现此接口，传递额外数据
+        IUniswapV3MintCallback(msg.sender).uniswapV3MintCallback(amount0, amount1, data);
 
         // ==================== C: CHECK（再次检查）===============
         // 步骤 7: 验证余额变化
@@ -181,9 +198,13 @@ contract UniswapV3Pool {
     /// @notice 执行代币交换
     /// @dev 当前版本使用硬编码的值，后续章节会实现动态计算
     /// @param recipient 接收输出代币的地址
+    /// @param data 回调函数的额外数据（编码后的 CallbackData）
     /// @return amount0 token0 的数量变化（负数表示输出给用户）
     /// @return amount1 token1 的数量变化（正数表示用户输入）
-    function swap(address recipient) public returns (int256 amount0, int256 amount1) {
+    function swap(address recipient, bytes calldata data)
+        public
+        returns (int256 amount0, int256 amount1)
+    {
         // ==================== 步骤 1: 计算目标价格和数量 ====================
         // TODO: 目前使用硬编码值，后续章节会实现动态计算
         // 这些值是通过数学公式预先计算得出的
@@ -210,8 +231,8 @@ contract UniswapV3Pool {
         // 3.2 通过回调接收输入代币（USDC）
         uint256 balance1Before = balance1(); // 记录当前余额
 
-        // 调用回调函数，通知调用者需要转入的代币数量
-        IUniswapV3SwapCallback(msg.sender).uniswapV3SwapCallback(amount0, amount1);
+        // 调用回调函数，通知调用者需要转入的代币数量，传递额外数据
+        IUniswapV3SwapCallback(msg.sender).uniswapV3SwapCallback(amount0, amount1, data);
 
         // 3.3 验证余额变化
         // 确保调用者在回调中确实转入了足够的代币

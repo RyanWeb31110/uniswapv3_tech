@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="900" height="700" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 700">
+  <defs>
+    <style>
+      .core-box { fill: #E8F5E9; stroke: #2E7D32; stroke-width: 3; }
+      .periphery-box { fill: #E1F5FE; stroke: #0277BD; stroke-width: 2; }
+      .title-text { font-family: Arial, sans-serif; font-size: 18px; font-weight: bold; text-anchor: middle; }
+      .subtitle-text { font-family: Arial, sans-serif; font-size: 14px; text-anchor: middle; fill: #555; }
+      .label-text { font-family: Arial, sans-serif; font-size: 13px; fill: #333; }
+      .small-text { font-family: Arial, sans-serif; font-size: 11px; fill: #666; }
+      .arrow { stroke: #424242; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .note-box { fill: #FFF9C4; stroke: #F57F17; stroke-width: 1; }
+    </style>
+    
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#424242" />
+    </marker>
+    
+    <filter id="shadow">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- 标题 -->
+  <text x="450" y="35" style="font-family: Arial, sans-serif; font-size: 24px; font-weight: bold; fill: #1976D2; text-anchor: middle;">Uniswap V3 合约架构</text>
+  
+  <!-- 核心合约层 -->
+  <rect x="250" y="80" width="400" height="220" rx="10" class="core-box" filter="url(#shadow)"/>
+  <text x="450" y="110" class="title-text" fill="#2E7D32">核心合约层 (Core Contracts)</text>
+  <text x="450" y="130" class="subtitle-text">精简 · 安全 · 不可变</text>
+  
+  <!-- UniswapV3Pool -->
+  <rect x="280" y="150" width="150" height="130" rx="5" fill="white" stroke="#2E7D32" stroke-width="2"/>
+  <text x="355" y="175" style="font-family: Arial, sans-serif; font-size: 15px; font-weight: bold; fill: #2E7D32; text-anchor: middle;">UniswapV3Pool</text>
+  <text x="290" y="195" class="small-text">• mint()</text>
+  <text x="290" y="210" class="small-text">• swap()</text>
+  <text x="290" y="225" class="small-text">• burn()</text>
+  <text x="290" y="240" class="small-text">• collect()</text>
+  <text x="290" y="255" class="small-text">• 回调机制</text>
+  <text x="290" y="270" class="small-text">• 状态管理</text>
+  
+  <!-- UniswapV3Factory -->
+  <rect x="470" y="150" width="150" height="130" rx="5" fill="white" stroke="#2E7D32" stroke-width="2"/>
+  <text x="545" y="175" style="font-family: Arial, sans-serif; font-size: 15px; font-weight: bold; fill: #2E7D32; text-anchor: middle;">UniswapV3Factory</text>
+  <text x="480" y="195" class="small-text">• createPool()</text>
+  <text x="480" y="210" class="small-text">• getPool()</text>
+  <text x="480" y="225" class="small-text">• 池子注册</text>
+  <text x="480" y="240" class="small-text">• CREATE2 部署</text>
+  <text x="480" y="255" class="small-text">• 协议费控制</text>
+  
+  <!-- 外围合约层 -->
+  <rect x="100" y="350" width="700" height="280" rx="10" class="periphery-box" filter="url(#shadow)"/>
+  <text x="450" y="380" class="title-text" fill="#0277BD">外围合约层 (Periphery Contracts)</text>
+  <text x="450" y="400" class="subtitle-text">用户友好 · 灵活 · 可升级</text>
+  
+  <!-- Manager -->
+  <rect x="130" y="420" width="140" height="180" rx="5" fill="white" stroke="#0277BD" stroke-width="2"/>
+  <text x="200" y="445" style="font-family: Arial, sans-serif; font-size: 14px; font-weight: bold; fill: #0277BD; text-anchor: middle;">Manager</text>
+  <text x="140" y="465" class="small-text">• 基础中介</text>
+  <text x="140" y="480" class="small-text">• mint()</text>
+  <text x="140" y="495" class="small-text">• swap()</text>
+  <text x="140" y="510" class="small-text">• 回调实现</text>
+  <text x="140" y="525" class="small-text">• 代币转移</text>
+  
+  <!-- SwapRouter -->
+  <rect x="300" y="420" width="140" height="180" rx="5" fill="white" stroke="#0277BD" stroke-width="2"/>
+  <text x="370" y="445" style="font-family: Arial, sans-serif; font-size: 14px; font-weight: bold; fill: #0277BD; text-anchor: middle;">SwapRouter</text>
+  <text x="310" y="465" class="small-text">• 多跳交易</text>
+  <text x="310" y="480" class="small-text">• 滑点保护</text>
+  <text x="310" y="495" class="small-text">• deadline 检查</text>
+  <text x="310" y="510" class="small-text">• 路径编码</text>
+  <text x="310" y="525" class="small-text">• ETH 支持</text>
+  
+  <!-- NonfungiblePositionManager -->
+  <rect x="470" y="420" width="140" height="180" rx="5" fill="white" stroke="#0277BD" stroke-width="2"/>
+  <text x="540" y="440" style="font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; fill: #0277BD; text-anchor: middle;">Nonfungible</text>
+  <text x="540" y="455" style="font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; fill: #0277BD; text-anchor: middle;">PositionManager</text>
+  <text x="480" y="475" class="small-text">• NFT (ERC721)</text>
+  <text x="480" y="490" class="small-text">• 仓位管理</text>
+  <text x="480" y="505" class="small-text">• 增减流动性</text>
+  <text x="480" y="520" class="small-text">• 收取手续费</text>
+  <text x="480" y="535" class="small-text">• SVG 渲染</text>
+  
+  <!-- Quoter -->
+  <rect x="640" y="420" width="140" height="180" rx="5" fill="white" stroke="#0277BD" stroke-width="2"/>
+  <text x="710" y="445" style="font-family: Arial, sans-serif; font-size: 14px; font-weight: bold; fill: #0277BD; text-anchor: middle;">QuoterV2</text>
+  <text x="650" y="465" class="small-text">• 链下查询</text>
+  <text x="650" y="480" class="small-text">• 价格预估</text>
+  <text x="650" y="495" class="small-text">• Gas 估算</text>
+  <text x="650" y="510" class="small-text">• 静态调用</text>
+  <text x="650" y="525" class="small-text">• 不修改状态</text>
+  
+  <!-- 连接箭头 -->
+  <line x1="355" y1="280" x2="200" y2="420" class="arrow"/>
+  <line x1="355" y1="280" x2="370" y2="420" class="arrow"/>
+  <line x1="450" y1="300" x2="540" y2="420" class="arrow"/>
+  <line x1="545" y1="280" x2="710" y2="420" class="arrow"/>
+  
+  <!-- 说明框 -->
+  <rect x="50" y="650" width="380" height="40" rx="5" class="note-box"/>
+  <text x="60" y="670" style="font-family: Arial, sans-serif; font-size: 12px; fill: #333;">
+    <tspan x="60" dy="0">💡 设计原则：</tspan>
+    <tspan x="60" dy="15">核心合约保证安全性和不可变性，外围合约提供灵活性和易用性</tspan>
+  </text>
+  
+  <rect x="470" y="650" width="380" height="40" rx="5" class="note-box"/>
+  <text x="480" y="670" style="font-family: Arial, sans-serif; font-size: 12px; fill: #333;">
+    <tspan x="480" dy="0">🔧 本章重点：</tspan>
+    <tspan x="480" dy="15">实现 Manager 合约，让 EOA 用户也能与核心池合约交互</tspan>
+  </text>
+</svg>
+

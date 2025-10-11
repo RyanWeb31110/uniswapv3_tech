@@ -15,5 +15,7 @@ interface IUniswapV3MintCallback {
     ///      池子会在调用此函数后验证余额是否增加
     /// @param amount0 需要转入的 token0 数量
     /// @param amount1 需要转入的 token1 数量
-    function uniswapV3MintCallback(uint256 amount0, uint256 amount1) external;
+    /// @param data mint 函数调用时传递的额外数据
+    function uniswapV3MintCallback(uint256 amount0, uint256 amount1, bytes calldata data)
+        external;
 }
