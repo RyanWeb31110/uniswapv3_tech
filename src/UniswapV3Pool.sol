@@ -5,6 +5,7 @@ import "./lib/Tick.sol";
 import "./lib/Position.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IUniswapV3MintCallback.sol";
+import "./interfaces/IUniswapV3SwapCallback.sol";
 
 /// @title UniswapV3Pool
 /// @notice 实现 Uniswap V3 的核心交易池逻辑
@@ -38,6 +39,7 @@ contract UniswapV3Pool {
         uint160 sqrtPriceX96; // 当前平方根价格（Q64.96 格式）
         int24 tick; // 当前 Tick
     }
+
     Slot0 public slot0;
 
     /// @notice 当前价格点的流动性
@@ -68,6 +70,17 @@ contract UniswapV3Pool {
         uint256 amount1
     );
 
+    /// @notice 代币交换事件
+    event Swap(
+        address indexed sender,
+        address indexed recipient,
+        int256 amount0,
+        int256 amount1,
+        uint160 sqrtPriceX96,
+        uint128 liquidity,
+        int24 tick
+    );
+
     // ============ 构造函数 ============
 
     /// @notice 创建新的交易池
@@ -75,16 +88,11 @@ contract UniswapV3Pool {
     /// @param token1_ 第二个代币地址
     /// @param sqrtPriceX96 初始平方根价格
     /// @param tick 初始 Tick
-    constructor(
-        address token0_,
-        address token1_,
-        uint160 sqrtPriceX96,
-        int24 tick
-    ) {
+    constructor(address token0_, address token1_, uint160 sqrtPriceX96, int24 tick) {
         token0 = token0_;
         token1 = token1_;
 
-        slot0 = Slot0({sqrtPriceX96: sqrtPriceX96, tick: tick});
+        slot0 = Slot0({ sqrtPriceX96: sqrtPriceX96, tick: tick });
     }
 
     // ============ 外部函数 ============
@@ -96,19 +104,15 @@ contract UniswapV3Pool {
     /// @param amount 要添加的流动性数量（L）
     /// @return amount0 实际存入的 token0 数量
     /// @return amount1 实际存入的 token1 数量
-    function mint(
-        address owner,
-        int24 lowerTick,
-        int24 upperTick,
-        uint128 amount
-    ) external returns (uint256 amount0, uint256 amount1) {
+    function mint(address owner, int24 lowerTick, int24 upperTick, uint128 amount)
+        external
+        returns (uint256 amount0, uint256 amount1)
+    {
         // ==================== C: CHECK（检查）====================
         // 步骤 1: 验证参数
-        if (
-            lowerTick >= upperTick ||
-            lowerTick < MIN_TICK ||
-            upperTick > MAX_TICK
-        ) revert InvalidTickRange();
+        if (lowerTick >= upperTick || lowerTick < MIN_TICK || upperTick > MAX_TICK) {
+            revert InvalidTickRange();
+        }
 
         if (amount == 0) revert ZeroLiquidity();
 
@@ -121,16 +125,12 @@ contract UniswapV3Pool {
         ticks.update(upperTick, amount);
 
         // 步骤 3: 更新仓位
-        Position.Info storage position = positions.get(
-            owner,
-            lowerTick,
-            upperTick
-        );
+        Position.Info storage position = positions.get(owner, lowerTick, upperTick);
         position.update(amount);
 
         // 步骤 4: 计算代币数量（暂时使用硬编码值）
         // TODO: 在后续章节中实现动态计算
-        amount0 = 0.998976618347425280 ether;
+        amount0 = 0.99897661834742528 ether;
         amount1 = 5000 ether;
 
         // 步骤 5: 更新池子流动性
@@ -150,29 +150,20 @@ contract UniswapV3Pool {
         if (amount1 > 0) balance1Before = balance1();
 
         // 调用回调函数 - 调用者必须实现此接口
-        IUniswapV3MintCallback(msg.sender).uniswapV3MintCallback(
-            amount0,
-            amount1
-        );
+        IUniswapV3MintCallback(msg.sender).uniswapV3MintCallback(amount0, amount1);
 
         // ==================== C: CHECK（再次检查）===============
         // 步骤 7: 验证余额变化
         // 确保调用者在回调中真的转入了代币
-        if (amount0 > 0 && balance0() < balance0Before + amount0)
+        if (amount0 > 0 && balance0() < balance0Before + amount0) {
             revert InsufficientInputAmount();
-        if (amount1 > 0 && balance1() < balance1Before + amount1)
+        }
+        if (amount1 > 0 && balance1() < balance1Before + amount1) {
             revert InsufficientInputAmount();
+        }
 
         // 步骤 8: 发出事件
-        emit Mint(
-            msg.sender,
-            owner,
-            lowerTick,
-            upperTick,
-            amount,
-            amount0,
-            amount1
-        );
+        emit Mint(msg.sender, owner, lowerTick, upperTick, amount, amount0, amount1);
     }
 
     // ============ 内部函数 ============
@@ -186,5 +177,51 @@ contract UniswapV3Pool {
     function balance1() internal view returns (uint256 balance) {
         balance = IERC20(token1).balanceOf(address(this));
     }
-}
 
+    /// @notice 执行代币交换
+    /// @dev 当前版本使用硬编码的值，后续章节会实现动态计算
+    /// @param recipient 接收输出代币的地址
+    /// @return amount0 token0 的数量变化（负数表示输出给用户）
+    /// @return amount1 token1 的数量变化（正数表示用户输入）
+    function swap(address recipient) public returns (int256 amount0, int256 amount1) {
+        // ==================== 步骤 1: 计算目标价格和数量 ====================
+        // TODO: 目前使用硬编码值，后续章节会实现动态计算
+        // 这些值是通过数学公式预先计算得出的
+
+        int24 nextTick = 85184; // 目标 tick
+        uint160 nextPrice = 5604469350942327889444743441197; // 目标价格
+
+        // amount0 是负数：表示用户从池子获得 ETH
+        amount0 = -0.008396714242162444 ether;
+
+        // amount1 是正数：表示用户向池子支付 USDC
+        amount1 = 42 ether;
+
+        // ==================== 步骤 2: 更新池子状态 ====================
+        // 交换会改变当前价格和 tick
+        (slot0.tick, slot0.sqrtPriceX96) = (nextTick, nextPrice);
+
+        // ==================== 步骤 3: 转移代币 ====================
+
+        // 3.1 将输出代币（ETH）发送给接收者
+        // 使用 uint256(-amount0) 将负数转为正数
+        IERC20(token0).transfer(recipient, uint256(-amount0));
+
+        // 3.2 通过回调接收输入代币（USDC）
+        uint256 balance1Before = balance1(); // 记录当前余额
+
+        // 调用回调函数，通知调用者需要转入的代币数量
+        IUniswapV3SwapCallback(msg.sender).uniswapV3SwapCallback(amount0, amount1);
+
+        // 3.3 验证余额变化
+        // 确保调用者在回调中确实转入了足够的代币
+        if (balance1Before + uint256(amount1) < balance1()) {
+            revert InsufficientInputAmount();
+        }
+
+        // ==================== 步骤 4: 发出事件 ====================
+        emit Swap(
+            msg.sender, recipient, amount0, amount1, slot0.sqrtPriceX96, liquidity, slot0.tick
+        );
+    }
+}

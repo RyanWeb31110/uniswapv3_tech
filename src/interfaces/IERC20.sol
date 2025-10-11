@@ -13,7 +13,5 @@ interface IERC20 {
     /// @param recipient 接收者地址
     /// @param amount 转账数量
     /// @return 是否转账成功
-    function transfer(address recipient, uint256 amount)
-        external
-        returns (bool);
+    function transfer(address recipient, uint256 amount) external returns (bool);
 }

@@ -22,18 +22,18 @@ library Position {
         address owner,
         int24 lowerTick,
         int24 upperTick
-    ) internal view returns (Position.Info storage position) { // storage: 返回引用而非副本
+    ) internal view returns (Position.Info storage position) {
+        // storage: 返回引用而非副本
         // 使用三个参数的哈希作为键
         // 这样只需要一个 32 字节的存储槽，而不是三个
-        position = self[
-            keccak256(abi.encodePacked(owner, lowerTick, upperTick))
-        ];
+        position = self[keccak256(abi.encodePacked(owner, lowerTick, upperTick))];
     }
 
     /// @notice 更新仓位的流动性
     /// @param self 仓位信息的存储引用
     /// @param liquidityDelta 流动性变化量
-    function update(Info storage self, uint128 liquidityDelta) internal { // storage: 直接修改区块链数据
+    function update(Info storage self, uint128 liquidityDelta) internal {
+        // storage: 直接修改区块链数据
         uint128 liquidityBefore = self.liquidity;
         uint128 liquidityAfter = liquidityBefore + liquidityDelta;
 
