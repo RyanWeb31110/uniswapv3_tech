@@ -1,10 +1,69 @@
-# UniswapV3 数学计算工具
+# Scripts 目录
 
-这个目录包含用于计算和验证 UniswapV3 数学参数的 Python 脚本。
+这个目录包含 UniswapV3 项目的实用脚本，包括数学计算工具和合约部署脚本。
 
 ## 📁 文件说明
 
-### unimath.py
+### 🔧 Solidity 部署脚本
+
+#### DeployDevelopment.s.sol
+
+本地开发环境的合约部署脚本。
+
+**功能：**
+- 部署 ERC20 测试代币（WETH 和 USDC）
+- 部署 UniswapV3Pool 核心池合约
+- 部署 UniswapV3Manager 管理合约
+- 为部署者铸造测试代币
+
+**使用方法：**
+
+```bash
+# 1. 启动 Anvil 本地节点
+anvil --code-size-limit 50000
+
+# 2. 在另一个终端执行部署
+forge script scripts/DeployDevelopment.s.sol \
+  --broadcast \
+  --fork-url http://localhost:8545 \
+  --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
+  --code-size-limit 50000
+```
+
+**部署参数：**
+- WETH 余额: 1 ether
+- USDC 余额: 5042 ether
+- 初始 Tick: 85176
+- 初始 sqrtPriceX96: 5602277097478614198912276234240
+
+详细文档参考：[09-合约部署与本地测试.md](../docs/1FirstSwap/09-合约部署与本地测试.md)
+
+#### deploy.sh
+
+一键部署脚本，自动化整个部署流程。
+
+**使用方法：**
+
+```bash
+# 确保脚本有执行权限
+chmod +x scripts/deploy.sh
+
+# 运行脚本
+./scripts/deploy.sh
+```
+
+**脚本功能：**
+- ✅ 自动检查 Anvil 是否运行
+- ✅ 设置环境变量
+- ✅ 编译合约
+- ✅ 部署合约
+- ✅ 显示验证命令
+
+---
+
+### 🧮 Python 数学计算工具
+
+#### unimath.py
 
 UniswapV3 流动性计算的核心工具，用于：
 

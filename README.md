@@ -224,6 +224,62 @@ forge test --match-test testMint -vvv
 forge test --gas-report
 ```
 
+### 部署到本地网络
+
+#### 方式一：使用一键部署脚本（推荐）
+
+```bash
+# 1. 在一个终端启动 Anvil 本地节点
+anvil --code-size-limit 50000
+
+# 2. 在另一个终端运行部署脚本
+./scripts/deploy.sh
+```
+
+#### 方式二：手动部署
+
+```bash
+# 1. 启动 Anvil
+anvil --code-size-limit 50000
+
+# 2. 设置环境变量
+export PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+export RPC_URL=http://localhost:8545
+
+# 3. 执行部署
+forge script scripts/DeployDevelopment.s.sol \
+  --broadcast \
+  --fork-url $RPC_URL \
+  --private-key $PRIVATE_KEY \
+  --code-size-limit 50000 \
+  -vv
+```
+
+**部署完成后：**
+
+从输出中复制合约地址并保存为环境变量：
+
+```bash
+export WETH=<WETH地址>
+export USDC=<USDC地址>
+export POOL=<Pool地址>
+export MANAGER=<Manager地址>
+export USER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+```
+
+**验证部署：**
+
+```bash
+# 查询代币余额（注意：cast call 不支持 --ether，需要用管道）
+cast call $WETH "balanceOf(address)" $USER | cast --from-wei  # 应该显示 1.0
+cast call $USDC "balanceOf(address)" $USER | cast --from-wei  # 应该显示 5042.0
+
+# 查询池子状态
+cast call $POOL "slot0()" | xargs cast --abi-decode "a()(uint160,int24)"
+```
+
+详细部署文档：[DEPLOYMENT.md](DEPLOYMENT.md) 和 [09-合约部署与本地测试.md](docs/1FirstSwap/09-合约部署与本地测试.md)
+
 ### 代码格式化
 
 ```bash
