@@ -226,7 +226,10 @@ contract UniswapV3Pool {
 
         // 3.1 将输出代币（ETH）发送给接收者
         // 使用 uint256(-amount0) 将负数转为正数
-        IERC20(token0).transfer(recipient, uint256(-amount0));
+        // 注意：amount0 是负数，所以 -amount0 是正数
+        if (amount0 < 0) {
+            IERC20(token0).transfer(recipient, uint256(-amount0));
+        }
 
         // 3.2 通过回调接收输入代币（USDC）
         uint256 balance1Before = balance1(); // 记录当前余额
@@ -236,8 +239,11 @@ contract UniswapV3Pool {
 
         // 3.3 验证余额变化
         // 确保调用者在回调中确实转入了足够的代币
-        if (balance1Before + uint256(amount1) < balance1()) {
-            revert InsufficientInputAmount();
+        if (amount1 > 0) {
+            uint256 expectedBalance = balance1Before + uint256(amount1);
+            if (balance1() < expectedBalance) {
+                revert InsufficientInputAmount();
+            }
         }
 
         // ==================== 步骤 4: 发出事件 ====================

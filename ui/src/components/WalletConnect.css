@@ -1,0 +1,115 @@
+/**
+ * 钱包连接组件样式
+ */
+
+.wallet-connect {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 24px;
+}
+
+.wallet-connect h2 {
+  margin: 0 0 20px 0;
+  font-size: 20px;
+  color: #333;
+}
+
+.wallet-status {
+  text-align: center;
+  padding: 20px 0;
+}
+
+.wallet-status p {
+  margin: 0 0 16px 0;
+  color: #666;
+}
+
+.wallet-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.info-row:last-child {
+  border-bottom: none;
+}
+
+.info-row .label {
+  font-weight: 500;
+  color: #666;
+}
+
+.info-row .value {
+  color: #333;
+  font-family: monospace;
+}
+
+.info-row .value.error {
+  color: #e74c3c;
+}
+
+.status-indicator {
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.status-indicator.not-installed {
+  background: #ffeaa7;
+  color: #d63031;
+}
+
+.status-indicator.not-connected {
+  background: #dfe6e9;
+  color: #636e72;
+}
+
+.status-indicator.connecting {
+  background: #74b9ff;
+  color: #0984e3;
+}
+
+.status-indicator.connected {
+  background: #55efc4;
+  color: #00b894;
+}
+
+.status-indicator.wrong-network {
+  background: #ffeaa7;
+  color: #fdcb6e;
+}
+
+.status-indicator.error {
+  background: #ff7675;
+  color: #d63031;
+}
+
+.warning-message {
+  margin-top: 16px;
+  padding: 12px;
+  background: #ffeaa7;
+  border-left: 4px solid #fdcb6e;
+  border-radius: 4px;
+}
+
+.warning-message p {
+  margin: 4px 0;
+  color: #d63031;
+}
+
+.warning-message .small {
+  font-size: 12px;
+  color: #666;
+}
+

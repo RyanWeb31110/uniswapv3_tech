@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MetaMask 连接测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #f6851b;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+        button:hover {
+            background: #e2761b;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 6px;
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+        }
+        .error {
+            background: #f8d7da;
+            border-left-color: #dc3545;
+            color: #721c24;
+        }
+        .success {
+            background: #d4edda;
+            border-left-color: #28a745;
+            color: #155724;
+        }
+        .info {
+            background: #d1ecf1;
+            border-left-color: #17a2b8;
+            color: #0c5460;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🦊 MetaMask 连接测试</h1>
+        
+        <div id="status" class="status info">
+            准备测试 MetaMask 连接...
+        </div>
+
+        <button onclick="checkMetaMask()">1. 检查 MetaMask</button>
+        <button onclick="connectMetaMask()">2. 连接 MetaMask</button>
+        <button onclick="getAccountInfo()">3. 获取账户信息</button>
+        <button onclick="switchNetwork()">4. 切换到 Anvil 网络</button>
+
+        <div id="results"></div>
+    </div>
+
+    <script>
+        let currentAccount = null;
+        let currentChainId = null;
+
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        function addResult(message) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML += `<div style="margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 4px;">${message}</div>`;
+        }
+
+        async function checkMetaMask() {
+            updateStatus('检查 MetaMask...', 'info');
+            
+            if (typeof window.ethereum === 'undefined') {
+                updateStatus('❌ MetaMask 未安装', 'error');
+                addResult('请安装 MetaMask 浏览器扩展');
+                return false;
+            } else {
+                updateStatus('✅ MetaMask 已安装', 'success');
+                addResult('MetaMask 检测成功');
+                return true;
+            }
+        }
+
+        async function connectMetaMask() {
+            if (!await checkMetaMask()) return;
+
+            updateStatus('请求连接 MetaMask...', 'info');
+            
+            try {
+                const accounts = await window.ethereum.request({ 
+                    method: 'eth_requestAccounts' 
+                });
+                
+                currentAccount = accounts[0];
+                updateStatus('✅ MetaMask 连接成功', 'success');
+                addResult(`已连接账户: ${currentAccount}`);
+                
+                // 获取链 ID
+                const chainId = await window.ethereum.request({ 
+                    method: 'eth_chainId' 
+                });
+                currentChainId = chainId;
+                addResult(`当前链 ID: ${chainId} (${parseInt(chainId, 16)})`);
+                
+            } catch (error) {
+                updateStatus('❌ 连接失败', 'error');
+                addResult(`错误: ${error.message}`);
+                
+                if (error.code === 4001) {
+                    addResult('用户拒绝了连接请求');
+                }
+            }
+        }
+
+        async function getAccountInfo() {
+            if (!currentAccount) {
+                updateStatus('请先连接 MetaMask', 'error');
+                return;
+            }
+
+            updateStatus('获取账户信息...', 'info');
+            
+            try {
+                // 获取余额
+                const balance = await window.ethereum.request({
+                    method: 'eth_getBalance',
+                    params: [currentAccount, 'latest']
+                });
+                
+                const balanceEth = parseInt(balance, 16) / Math.pow(10, 18);
+                
+                addResult(`账户余额: ${balanceEth.toFixed(4)} ETH`);
+                addResult(`账户地址: ${currentAccount}`);
+                addResult(`链 ID: ${currentChainId} (${parseInt(currentChainId, 16)})`);
+                
+                updateStatus('✅ 账户信息获取成功', 'success');
+                
+            } catch (error) {
+                updateStatus('❌ 获取账户信息失败', 'error');
+                addResult(`错误: ${error.message}`);
+            }
+        }
+
+        async function switchNetwork() {
+            if (!currentAccount) {
+                updateStatus('请先连接 MetaMask', 'error');
+                return;
+            }
+
+            updateStatus('切换到 Anvil 网络...', 'info');
+            
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: '0x7a69' }], // 31337 in hex
+                });
+                
+                updateStatus('✅ 网络切换成功', 'success');
+                addResult('已切换到 Anvil Local 网络 (Chain ID: 31337)');
+                
+            } catch (error) {
+                if (error.code === 4902) {
+                    // 网络不存在，尝试添加
+                    try {
+                        await window.ethereum.request({
+                            method: 'wallet_addEthereumChain',
+                            params: [{
+                                chainId: '0x7a69',
+                                chainName: 'Anvil Local',
+                                rpcUrls: ['http://localhost:8545'],
+                                nativeCurrency: {
+                                    name: 'Ether',
+                                    symbol: 'ETH',
+                                    decimals: 18
+                                }
+                            }]
+                        });
+                        
+                        updateStatus('✅ 网络添加并切换成功', 'success');
+                        addResult('已添加并切换到 Anvil Local 网络');
+                        
+                    } catch (addError) {
+                        updateStatus('❌ 添加网络失败', 'error');
+                        addResult(`添加网络错误: ${addError.message}`);
+                    }
+                } else {
+                    updateStatus('❌ 网络切换失败', 'error');
+                    addResult(`切换网络错误: ${error.message}`);
+                }
+            }
+        }
+
+        // 监听账户变化
+        if (typeof window.ethereum !== 'undefined') {
+            window.ethereum.on('accountsChanged', (accounts) => {
+                if (accounts.length === 0) {
+                    currentAccount = null;
+                    updateStatus('账户已断开', 'info');
+                } else {
+                    currentAccount = accounts[0];
+                    updateStatus('账户已切换', 'info');
+                    addResult(`新账户: ${currentAccount}`);
+                }
+            });
+
+            window.ethereum.on('chainChanged', (chainId) => {
+                currentChainId = chainId;
+                updateStatus('网络已切换', 'info');
+                addResult(`新链 ID: ${chainId} (${parseInt(chainId, 16)})`);
+            });
+        }
+    </script>
+</body>
+</html>
