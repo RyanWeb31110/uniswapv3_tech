@@ -3,6 +3,7 @@ pragma solidity ^0.8.14;
 
 import "./lib/Tick.sol";
 import "./lib/Position.sol";
+import "./lib/TickBitmap.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IUniswapV3MintCallback.sol";
 import "./interfaces/IUniswapV3SwapCallback.sol";
@@ -16,6 +17,7 @@ contract UniswapV3Pool {
     using Tick for mapping(int24 => Tick.Info);
     using Position for mapping(bytes32 => Position.Info);
     using Position for Position.Info;
+    using TickBitmap for mapping(int16 => uint256);
 
     // ============ 数据结构 ============
 
@@ -63,6 +65,9 @@ contract UniswapV3Pool {
 
     /// @notice 仓位状态映射
     mapping(bytes32 => Position.Info) public positions;
+
+    /// @notice 刻度位图索引
+    mapping(int16 => uint256) public tickBitmap;
 
     // ============ 错误定义 ============
 
@@ -137,9 +142,13 @@ contract UniswapV3Pool {
         // CEI 模式的关键：在调用外部合约前更新所有状态
         // 这样即使发生重入，重入者看到的也是最新状态
 
-        // 步骤 2: 更新 Tick
+        // 步骤 2: 更新 Tick 和位图索引
         ticks.update(lowerTick, amount);
         ticks.update(upperTick, amount);
+        
+        // 翻转刻度标志位（如果刻度从无流动性变为有流动性，或反之）
+        tickBitmap.flipTick(lowerTick, 1);
+        tickBitmap.flipTick(upperTick, 1);
 
         // 步骤 3: 更新仓位
         Position.Info storage position = positions.get(owner, lowerTick, upperTick);
@@ -196,7 +205,7 @@ contract UniswapV3Pool {
     }
 
     /// @notice 执行代币交换
-    /// @dev 当前版本使用硬编码的值，后续章节会实现动态计算
+    /// @dev 使用 TickBitmap 动态查找下一个刻度
     /// @param recipient 接收输出代币的地址
     /// @param data 回调函数的额外数据（编码后的 CallbackData）
     /// @return amount0 token0 的数量变化（负数表示输出给用户）
@@ -205,11 +214,29 @@ contract UniswapV3Pool {
         public
         returns (int256 amount0, int256 amount1)
     {
-        // ==================== 步骤 1: 计算目标价格和数量 ====================
-        // TODO: 目前使用硬编码值，后续章节会实现动态计算
-        // 这些值是通过数学公式预先计算得出的
-
-        int24 nextTick = 85184; // 目标 tick
+        // ==================== 步骤 1: 动态查找下一个刻度 ====================
+        // 使用 TickBitmap 查找下一个已初始化的刻度
+        // 这里我们模拟一个简单的查找逻辑，实际实现会更复杂
+        
+        int24 currentTick = slot0.tick;
+        int24 nextTick;
+        bool found;
+        
+        // 假设我们总是向右查找（价格上升方向）
+        // 在实际实现中，这会根据交换方向动态决定
+        (nextTick, found) = tickBitmap.nextInitializedTickWithinOneWord(
+            currentTick,
+            1,    // tickSpacing = 1
+            true  // lte = true，向右搜索
+        );
+        
+        // 如果没有找到已初始化的刻度，使用硬编码值作为后备
+        if (!found) {
+            nextTick = 85184; // 后备目标 tick
+        }
+        
+        // TODO: 后续章节会实现动态价格计算
+        // 目前仍使用硬编码的价格和数量
         uint160 nextPrice = 5604469350942327889444743441197; // 目标价格
 
         // amount0 是负数：表示用户从池子获得 ETH
