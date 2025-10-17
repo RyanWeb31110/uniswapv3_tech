@@ -225,7 +225,7 @@ contract UniswapV3ManagerTest is Test {
         uint256 bobToken1Before = token1.balanceOf(bob);
 
         // 6. Bob 通过 Manager 执行交换
-        (int256 amount0, int256 amount1) = manager.swap(address(pool), data);
+        (int256 amount0, int256 amount1) = manager.swap(address(pool), true, 1 ether, data);
 
         vm.stopPrank();
 
@@ -273,7 +273,7 @@ contract UniswapV3ManagerTest is Test {
 
         // 5. 交换应该失败
         vm.expectRevert();
-        manager.swap(address(pool), data);
+        manager.swap(address(pool), true, 1 ether, data);
 
         vm.stopPrank();
     }

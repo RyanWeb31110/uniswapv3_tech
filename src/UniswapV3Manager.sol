@@ -48,17 +48,23 @@ contract UniswapV3Manager {
     /// @notice 在指定池中执行代币交换
     /// @dev 用户需要先 approve 足够的输入代币给本合约
     /// @param poolAddress_ 目标池合约地址
+    /// @param zeroForOne 交换方向标志
+    /// @param amountSpecified 用户指定的输入金额
     /// @param data 额外数据（传递给池合约的回调）
     /// @return amount0 token0 的变化量
     /// @return amount1 token1 的变化量
-    function swap(address poolAddress_, bytes calldata data)
-        public
-        returns (int256 amount0, int256 amount1)
-    {
+    function swap(
+        address poolAddress_, 
+        bool zeroForOne,
+        uint256 amountSpecified,
+        bytes calldata data
+    ) public returns (int256 amount0, int256 amount1) {
         // 将调用转发到池合约
         // msg.sender 是用户地址，会接收输出代币
         (amount0, amount1) = UniswapV3Pool(poolAddress_).swap(
             msg.sender, // recipient: 用户地址
+            zeroForOne,
+            amountSpecified,
             data
         );
     }

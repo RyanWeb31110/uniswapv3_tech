@@ -4,6 +4,9 @@ pragma solidity ^0.8.14;
 import "./lib/Tick.sol";
 import "./lib/Position.sol";
 import "./lib/TickBitmap.sol";
+import "./lib/Math.sol";
+import "./lib/TickMath.sol";
+import "./lib/SwapMath.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IUniswapV3MintCallback.sol";
 import "./interfaces/IUniswapV3SwapCallback.sol";
@@ -30,6 +33,25 @@ contract UniswapV3Pool {
         address token1;
         /// @notice 支付代币的用户地址
         address payer;
+    }
+
+    /// @notice 交换状态结构
+    /// @dev 维护整个交换过程的状态
+    struct SwapState {
+        uint256 amountSpecifiedRemaining; // 剩余需要处理的输入金额
+        uint256 amountCalculated;         // 已计算出的输出金额
+        uint160 sqrtPriceX96;             // 当前价格（Q64.96 格式）
+        int24 tick;                       // 当前 Tick
+    }
+
+    /// @notice 交换步骤状态结构
+    /// @dev 维护单次迭代的状态
+    struct StepState {
+        uint160 sqrtPriceStartX96; // 步骤开始时的价格
+        int24 nextTick;            // 下一个已初始化的 Tick
+        uint160 sqrtPriceNextX96;  // 下一个 Tick 的价格
+        uint256 amountIn;          // 当前步骤的输入金额
+        uint256 amountOut;         // 当前步骤的输出金额
     }
 
     // ============ 常量 ============
@@ -143,21 +165,42 @@ contract UniswapV3Pool {
         // 这样即使发生重入，重入者看到的也是最新状态
 
         // 步骤 2: 更新 Tick 和位图索引
-        ticks.update(lowerTick, amount);
-        ticks.update(upperTick, amount);
+        bool flippedLower = ticks.update(lowerTick, amount);
+        bool flippedUpper = ticks.update(upperTick, amount);
         
-        // 翻转刻度标志位（如果刻度从无流动性变为有流动性，或反之）
-        tickBitmap.flipTick(lowerTick, 1);
-        tickBitmap.flipTick(upperTick, 1);
+        // 如果下边界 Tick 状态发生翻转，更新位图索引
+        if (flippedLower) {
+            tickBitmap.flipTick(lowerTick, 1);
+        }
+
+        // 如果上边界 Tick 状态发生翻转，更新位图索引
+        if (flippedUpper) {
+            tickBitmap.flipTick(upperTick, 1);
+        }
 
         // 步骤 3: 更新仓位
         Position.Info storage position = positions.get(owner, lowerTick, upperTick);
         position.update(amount);
 
-        // 步骤 4: 计算代币数量（暂时使用硬编码值）
-        // TODO: 在后续章节中实现动态计算
-        amount0 = 0.99897661834742528 ether;
-        amount1 = 5000 ether;
+        // 步骤 4: 动态计算代币数量
+        // 获取当前价格状态
+        Slot0 memory slot0_ = slot0;
+
+        // 动态计算所需的 Token0 数量
+        // 使用当前价格和上边界价格
+        amount0 = Math.calcAmount0Delta(
+            slot0_.sqrtPriceX96,
+            TickMath.getSqrtRatioAtTick(upperTick),
+            amount
+        );
+
+        // 动态计算所需的 Token1 数量
+        // 使用当前价格和下边界价格
+        amount1 = Math.calcAmount1Delta(
+            slot0_.sqrtPriceX96,
+            TickMath.getSqrtRatioAtTick(lowerTick),
+            amount
+        );
 
         // 步骤 5: 更新池子流动性
         liquidity += uint128(amount);
@@ -205,77 +248,109 @@ contract UniswapV3Pool {
     }
 
     /// @notice 执行代币交换
-    /// @dev 使用 TickBitmap 动态查找下一个刻度
+    /// @dev 实现动态的订单填充机制
     /// @param recipient 接收输出代币的地址
-    /// @param data 回调函数的额外数据（编码后的 CallbackData）
-    /// @return amount0 token0 的数量变化（负数表示输出给用户）
-    /// @return amount1 token1 的数量变化（正数表示用户输入）
-    function swap(address recipient, bytes calldata data)
-        public
-        returns (int256 amount0, int256 amount1)
-    {
-        // ==================== 步骤 1: 动态查找下一个刻度 ====================
-        // 使用 TickBitmap 查找下一个已初始化的刻度
-        // 这里我们模拟一个简单的查找逻辑，实际实现会更复杂
-        
-        int24 currentTick = slot0.tick;
-        int24 nextTick;
-        bool found;
-        
-        // 假设我们总是向右查找（价格上升方向）
-        // 在实际实现中，这会根据交换方向动态决定
-        (nextTick, found) = tickBitmap.nextInitializedTickWithinOneWord(
-            currentTick,
-            1,    // tickSpacing = 1
-            true  // lte = true，向右搜索
-        );
-        
-        // 如果没有找到已初始化的刻度，使用硬编码值作为后备
-        if (!found) {
-            nextTick = 85184; // 后备目标 tick
+    /// @param zeroForOne 交换方向标志
+    /// @param amountSpecified 用户指定的输入金额
+    /// @param data 回调函数的额外数据
+    /// @return amount0 token0 的数量变化
+    /// @return amount1 token1 的数量变化
+    function swap(
+        address recipient,
+        bool zeroForOne,
+        uint256 amountSpecified,
+        bytes calldata data
+    ) public returns (int256 amount0, int256 amount1) {
+        // 获取当前池子状态
+        Slot0 memory slot0_ = slot0;
+
+        // 初始化交换状态
+        SwapState memory state = SwapState({
+            amountSpecifiedRemaining: amountSpecified,
+            amountCalculated: 0,
+            sqrtPriceX96: slot0_.sqrtPriceX96,
+            tick: slot0_.tick
+        });
+
+        // 主循环：直到处理完所有输入金额
+        while (state.amountSpecifiedRemaining > 0) {
+            StepState memory step;
+
+            // 设置当前步骤的起始价格
+            step.sqrtPriceStartX96 = state.sqrtPriceX96;
+
+            // 查找下一个已初始化的 Tick
+            (step.nextTick, ) = tickBitmap.nextInitializedTickWithinOneWord(
+                state.tick,
+                1,        // tickSpacing = 1
+                zeroForOne
+            );
+
+            // 计算下一个 Tick 的价格
+            step.sqrtPriceNextX96 = TickMath.getSqrtRatioAtTick(step.nextTick);
+
+            // 计算当前价格区间可提供的交换金额
+            (state.sqrtPriceX96, step.amountIn, step.amountOut) = SwapMath
+                .computeSwapStep(
+                    state.sqrtPriceX96,
+                    step.sqrtPriceNextX96,
+                    liquidity,
+                    state.amountSpecifiedRemaining
+                );
+
+            // 更新交换状态
+            state.amountSpecifiedRemaining -= step.amountIn;
+            state.amountCalculated += step.amountOut;
+            state.tick = TickMath.getTickAtSqrtRatio(state.sqrtPriceX96);
         }
-        
-        // TODO: 后续章节会实现动态价格计算
-        // 目前仍使用硬编码的价格和数量
-        uint160 nextPrice = 5604469350942327889444743441197; // 目标价格
 
-        // amount0 是负数：表示用户从池子获得 ETH
-        amount0 = -0.008396714242162444 ether;
-
-        // amount1 是正数：表示用户向池子支付 USDC
-        amount1 = 42 ether;
-
-        // ==================== 步骤 2: 更新池子状态 ====================
-        // 交换会改变当前价格和 tick
-        (slot0.tick, slot0.sqrtPriceX96) = (nextTick, nextPrice);
-
-        // ==================== 步骤 3: 转移代币 ====================
-
-        // 3.1 将输出代币（ETH）发送给接收者
-        // 使用 uint256(-amount0) 将负数转为正数
-        // 注意：amount0 是负数，所以 -amount0 是正数
-        if (amount0 < 0) {
-            IERC20(token0).transfer(recipient, uint256(-amount0));
+        // 更新池子状态
+        if (state.tick != slot0_.tick) {
+            (slot0.sqrtPriceX96, slot0.tick) = (state.sqrtPriceX96, state.tick);
         }
 
-        // 3.2 通过回调接收输入代币（USDC）
-        uint256 balance1Before = balance1(); // 记录当前余额
+        // 计算最终的交换金额
+        (amount0, amount1) = zeroForOne
+            ? (
+                int256(amountSpecified - state.amountSpecifiedRemaining),
+                -int256(state.amountCalculated)
+            )
+            : (
+                -int256(state.amountCalculated),
+                int256(amountSpecified - state.amountSpecifiedRemaining)
+            );
 
-        // 调用回调函数，通知调用者需要转入的代币数量，传递额外数据
-        IUniswapV3SwapCallback(msg.sender).uniswapV3SwapCallback(amount0, amount1, data);
-
-        // 3.3 验证余额变化
-        // 确保调用者在回调中确实转入了足够的代币
-        if (amount1 > 0) {
-            uint256 expectedBalance = balance1Before + uint256(amount1);
-            if (balance1() < expectedBalance) {
+        // 执行代币转移
+        if (zeroForOne) {
+            // 用 token0 换取 token1
+            IERC20(token1).transfer(recipient, uint256(-amount1));
+            
+            uint256 balance0Before = balance0();
+            IUniswapV3SwapCallback(msg.sender).uniswapV3SwapCallback(
+                amount0,
+                amount1,
+                data
+            );
+            if (balance0Before + uint256(amount0) > balance0())
                 revert InsufficientInputAmount();
-            }
+        } else {
+            // 用 token1 换取 token0
+            IERC20(token0).transfer(recipient, uint256(-amount0));
+            
+            uint256 balance1Before = balance1();
+            IUniswapV3SwapCallback(msg.sender).uniswapV3SwapCallback(
+                amount0,
+                amount1,
+                data
+            );
+            if (balance1Before + uint256(amount1) > balance1())
+                revert InsufficientInputAmount();
         }
 
-        // ==================== 步骤 4: 发出事件 ====================
+        // 发出交换事件
         emit Swap(
-            msg.sender, recipient, amount0, amount1, slot0.sqrtPriceX96, liquidity, slot0.tick
+            msg.sender, recipient, amount0, amount1, 
+            slot0.sqrtPriceX96, liquidity, slot0.tick
         );
     }
 }
