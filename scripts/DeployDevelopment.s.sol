@@ -4,6 +4,7 @@ pragma solidity ^0.8.14;
 import "forge-std/Script.sol";
 import "../src/UniswapV3Pool.sol";
 import "../src/UniswapV3Manager.sol";
+import "../src/UniswapV3Quoter.sol";
 import "../test/ERC20Mintable.sol";
 
 /**
@@ -42,7 +43,10 @@ contract DeployDevelopment is Script {
         // 步骤 3: 部署管理合约
         UniswapV3Manager manager = new UniswapV3Manager();
         
-        // 步骤 4: 为部署者铸造测试代币
+        // 步骤 4: 部署 Quoter 合约
+        UniswapV3Quoter quoter = new UniswapV3Quoter();
+        
+        // 步骤 5: 为部署者铸造测试代币
         // msg.sender 是发起广播交易的地址
         token0.mint(msg.sender, wethBalance);
         token1.mint(msg.sender, usdcBalance);
@@ -56,6 +60,7 @@ contract DeployDevelopment is Script {
         console.log(unicode"USDC 地址:", address(token1));
         console.log(unicode"Pool 地址:", address(pool));
         console.log(unicode"Manager 地址:", address(manager));
+        console.log(unicode"Quoter 地址:", address(quoter));
     }
 }
 

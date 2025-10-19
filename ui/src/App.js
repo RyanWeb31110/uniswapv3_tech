@@ -12,6 +12,7 @@ import { MetaMaskProvider } from './contexts/MetaMaskContext';
 import WalletConnect from './components/WalletConnect';
 import AddLiquidity from './components/AddLiquidity';
 import Swap from './components/Swap';
+import EnhancedSwap from './components/EnhancedSwap';
 import EventFeed from './components/EventFeed';
 import './App.css';
 
@@ -42,6 +43,7 @@ function App() {
                 <WalletConnect />
                 <AddLiquidity onSuccess={handleTransactionSuccess} />
                 <Swap onSuccess={handleTransactionSuccess} />
+                <EnhancedSwap onSuccess={handleTransactionSuccess} />
               </div>
 
               {/* 右侧：事件列表 */}

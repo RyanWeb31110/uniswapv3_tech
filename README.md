@@ -80,6 +80,7 @@
   - Quoter 和 QuoterV2 的最小化实现
   - 只支持"精确输入"交换
   - 可用于前端价格预估
+  - 通过模拟真实交换获取精确报价
 ```
 
 **UniswapV3NFTManager** - NFT 仓位管理器
@@ -181,7 +182,8 @@ ui/
 **功能特点：**
 - 🔗 **MetaMask 集成** - 连接钱包并管理账户
 - 💧 **添加流动性** - 向池子提供流动性并铸造仓位
-- 🔄 **代币交换** - 在价格区间内进行代币兑换
+- 🔄 **基础代币交换** - 在价格区间内进行代币兑换
+- 🔄 **增强版交换** - 双向交换、实时报价、方向切换
 - 📊 **实时事件** - 订阅并显示链上 Mint 和 Swap 事件
 - 🎨 **现代化 UI** - 使用 React 19 和 Ethers.js 5 构建
 - 📱 **响应式设计** - 支持桌面和移动端
@@ -194,6 +196,8 @@ npm start  # 启动开发服务器，访问 http://localhost:3000
 ```
 
 > 📖 详细使用说明请参阅 [ui/README.md](ui/README.md) 和 [ui/QUICKSTART.md](ui/QUICKSTART.md)
+> 
+> 🆕 **增强版交换功能**：查看 [ui/ENHANCED_SWAP_README.md](ui/ENHANCED_SWAP_README.md) 了解最新的双向交换、实时报价等高级功能
 
 > 💡 **学习收获**
 >
@@ -249,8 +253,8 @@ forge test --gas-report
 # 1. 在一个终端启动 Anvil 本地节点
 anvil --code-size-limit 50000
 
-# 2. 在另一个终端运行部署脚本
-./scripts/deploy.sh
+# 2. 在另一个终端运行部署脚本（包含 Quoter 合约）
+./scripts/deploy-with-quoter.sh
 ```
 
 #### 方式二：手动部署
@@ -411,6 +415,86 @@ function observe(uint32[] calldata secondsAgos)
         uint160[] memory secondsPerLiquidityCumulativeX128s
     );
 ```
+
+## 🆕 增强版交换功能
+
+### 功能特性
+
+本项目现在包含一个功能完整的增强版交换界面，实现了文章《用户界面构建》中描述的所有功能：
+
+#### 🔄 双向交换支持
+- **WETH → USDC**：使用 WETH 购买 USDC
+- **USDC → WETH**：使用 USDC 购买 WETH
+- 一键切换交换方向
+
+#### ⚡ 实时报价更新
+- 基于 Quoter 合约的精确价格计算
+- 防抖优化（300ms）避免频繁链上调用
+- 实时显示预计获得的代币数量
+
+#### 🎯 智能状态管理
+- 加载状态指示器
+- 用户友好的错误处理
+- 输入验证和余额检查
+
+#### 📱 响应式设计
+- 适配桌面和移动端
+- 现代化 UI 设计
+- 流畅的用户体验
+
+### 技术实现
+
+#### 核心组件
+- **EnhancedSwap.js**：主交换组件
+- **EnhancedSwap.css**：样式文件
+- **contracts.js**：合约配置
+
+#### 关键功能
+```javascript
+// 防抖报价更新
+const updateAmountOut = useCallback(
+  debounce(async (amount) => {
+    const result = await quoter.callStatic.quote({
+      pool: CONTRACTS.Pool,
+      amountIn: ethers.utils.parseEther(amount),
+      zeroForOne: zeroForOne
+    });
+    // 更新输出金额
+  }, 300),
+  [zeroForOne, enabled]
+);
+
+// 方向切换
+const handleDirectionChange = useCallback(() => {
+  setZeroForOne(!zeroForOne);
+  // 交换金额并重新计算报价
+}, [zeroForOne, amount0, amount1]);
+```
+
+### 使用方法
+
+1. **部署合约**：使用 `./scripts/deploy-with-quoter.sh` 部署包含 Quoter 合约的完整系统
+2. **启动前端**：`cd ui && npm start`
+3. **连接钱包**：连接 MetaMask 到 Anvil Local 网络
+4. **开始交换**：输入金额，查看实时报价，执行交换
+
+### 部署脚本
+
+我们提供了一个自动化部署脚本，可以一键部署包含 Quoter 合约的完整系统：
+
+```bash
+# 启动 Anvil 节点
+anvil
+
+# 运行部署脚本
+./scripts/deploy-with-quoter.sh
+```
+
+脚本会自动：
+- 部署所有合约（包括 Quoter）
+- 更新前端配置文件
+- 生成部署报告
+- 运行测试验证
 
 ## 🔬 核心技术原理
 
@@ -595,19 +679,24 @@ forge coverage --report lcov
 - [x] 项目初始化和开发环境搭建
 - [x] Python 数学计算工具（`scripts/unimath.py`）
 - [x] 流动性计算原理文档
+- [x] 核心数学库实现（Solidity）
+- [x] Tick 机制实现
+- [x] 流动性管理
+- [x] 交换功能
+- [x] Quoter 合约实现
+- [x] 前端界面（基础版）
+- [x] 增强版交换界面（双向交换、实时报价）
 
 ### 进行中
-- [ ] 核心数学库实现（Solidity）
-- [ ] Tick 机制实现
-- [ ] 流动性管理
-
-### 计划中
-- [ ] 交换功能
-- [ ] 费用机制
+- [ ] 费用机制完善
 - [ ] 预言机功能
 - [ ] NFT 仓位管理
+
+### 计划中
 - [ ] 路由器实现
-- [ ] 前端界面
+- [ ] 多跳交换
+- [ ] 滑点保护
+- [ ] 交易历史
 
 ## 🤝 贡献指南
 
