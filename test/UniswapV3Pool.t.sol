@@ -427,6 +427,174 @@ contract UniswapV3PoolTest is Test {
         assertEq(token1.balanceOf(address(pool)), amount1, "Pool Token1 balance incorrect");
     }
     
+    /// @notice 测试上方价格区间的流动性提供
+    function testMintAboveCurrentPrice() public {
+        // 设置价格区间在当前价格之上
+        int24 lowerTick = 100;   // 对应更高价格
+        int24 upperTick = 200;
+        
+        // 部署池子
+        uint160 initPrice = 79228162514264337593543950336; // 1.0 in Q64.96
+        pool = new UniswapV3Pool(address(token0), address(token1), initPrice, 0);
+        
+        // 给测试合约铸造代币
+        token0.mint(address(this), 100 ether);
+        token1.mint(address(this), 100 ether);
+        
+        // 设置回调标志
+        shouldTransferInCallback = true;
+        
+        // 编码回调数据
+        bytes memory data = abi.encode(
+            UniswapV3Pool.CallbackData({
+                token0: address(token0),
+                token1: address(token1),
+                payer: address(this)
+            })
+        );
+        
+        // 提供流动性
+        (uint256 amount0, uint256 amount1) = pool.mint(
+            address(this), lowerTick, upperTick, 1000000000000000000, data
+        );
+        
+        // 验证结果
+        assertTrue(amount0 > 0, "Should need token0");
+        assertTrue(amount1 == 0, "Should not need token1");
+        
+        // 验证池子状态
+        assertEq(pool.liquidity(), 0, "Liquidity tracker should be 0");
+        
+        console.log("Above current price - Token0 amount:", amount0);
+        console.log("Above current price - Token1 amount:", amount1);
+    }
+
+    /// @notice 测试包含当前价格的价格区间
+    function testMintIncludingCurrentPrice() public {
+        // 设置价格区间包含当前价格
+        int24 lowerTick = -100;  // 低于当前价格
+        int24 upperTick = 100;   // 高于当前价格
+        
+        // 部署池子
+        uint160 initPrice = 79228162514264337593543950336; // 1.0 in Q64.96
+        pool = new UniswapV3Pool(address(token0), address(token1), initPrice, 0);
+        
+        // 给测试合约铸造代币
+        token0.mint(address(this), 100 ether);
+        token1.mint(address(this), 100 ether);
+        
+        // 设置回调标志
+        shouldTransferInCallback = true;
+        
+        // 编码回调数据
+        bytes memory data = abi.encode(
+            UniswapV3Pool.CallbackData({
+                token0: address(token0),
+                token1: address(token1),
+                payer: address(this)
+            })
+        );
+        
+        // 提供流动性
+        (uint256 amount0, uint256 amount1) = pool.mint(
+            address(this), lowerTick, upperTick, 1000000000000000000, data
+        );
+        
+        // 验证结果
+        assertTrue(amount0 > 0, "Should need token0");
+        assertTrue(amount1 > 0, "Should need token1");
+        
+        // 验证池子状态
+        assertEq(pool.liquidity(), 1000000000000000000, "Liquidity tracker should be updated");
+        
+        console.log("Including current price - Token0 amount:", amount0);
+        console.log("Including current price - Token1 amount:", amount1);
+    }
+
+    /// @notice 测试下方价格区间的流动性提供
+    function testMintBelowCurrentPrice() public {
+        // 设置价格区间在当前价格之下
+        int24 lowerTick = -200;  // 对应更低价格
+        int24 upperTick = -100;
+        
+        // 部署池子
+        uint160 initPrice = 79228162514264337593543950336; // 1.0 in Q64.96
+        pool = new UniswapV3Pool(address(token0), address(token1), initPrice, 0);
+        
+        // 给测试合约铸造代币
+        token0.mint(address(this), 100 ether);
+        token1.mint(address(this), 100 ether);
+        
+        // 设置回调标志
+        shouldTransferInCallback = true;
+        
+        // 编码回调数据
+        bytes memory data = abi.encode(
+            UniswapV3Pool.CallbackData({
+                token0: address(token0),
+                token1: address(token1),
+                payer: address(this)
+            })
+        );
+        
+        // 提供流动性
+        (uint256 amount0, uint256 amount1) = pool.mint(
+            address(this), lowerTick, upperTick, 1000000000000000000, data
+        );
+        
+        // 验证结果
+        assertTrue(amount0 == 0, "Should not need token0");
+        assertTrue(amount1 > 0, "Should need token1");
+        
+        // 验证池子状态
+        assertEq(pool.liquidity(), 0, "Liquidity tracker should be 0");
+        
+        console.log("Below current price - Token0 amount:", amount0);
+        console.log("Below current price - Token1 amount:", amount1);
+    }
+
+    /// @notice 测试边界情况
+    function testMintBoundaryConditions() public {
+        // 部署池子
+        uint160 initPrice = 79228162514264337593543950336; // 1.0 in Q64.96
+        pool = new UniswapV3Pool(address(token0), address(token1), initPrice, 0);
+        
+        // 给测试合约铸造代币
+        token0.mint(address(this), 100 ether);
+        token1.mint(address(this), 100 ether);
+        
+        // 设置回调标志
+        shouldTransferInCallback = true;
+        
+        // 编码回调数据
+        bytes memory data = abi.encode(
+            UniswapV3Pool.CallbackData({
+                token0: address(token0),
+                token1: address(token1),
+                payer: address(this)
+            })
+        );
+        
+        // 测试下边界刚好等于当前价格
+        (uint256 amount0_1, uint256 amount1_1) = pool.mint(
+            address(this), 0, 100, 1000000000000000000, data
+        );
+        
+        // 测试上边界刚好等于当前价格
+        (uint256 amount0_2, uint256 amount1_2) = pool.mint(
+            address(this), -100, 0, 1000000000000000000, data
+        );
+        
+        // 验证边界情况
+        // 当下边界等于当前价格时，amount1 可能为 0（数学上正确）
+        assertTrue(amount0_1 > 0, "Lower boundary equals current price should need token0");
+        assertTrue(amount1_1 >= 0, "Lower boundary equals current price should have non-negative amount1");
+        
+        // 当上边界等于当前价格时，amount0 可能为 0（数学上正确）
+        assertTrue(amount0_2 >= 0, "Upper boundary equals current price should have non-negative amount0");
+        assertTrue(amount1_2 > 0, "Upper boundary equals current price should need token1");
+    }
+
     /// @notice 测试不同价格区间的铸币
     function testMintingDifferentRanges() public {
         // 部署池子
@@ -463,10 +631,10 @@ contract UniswapV3PoolTest is Test {
             address(this), 200, 300, 1000000000000000000, data
         );
         
-        // 验证 Token1 有数量（由于我们的简化实现，Token0 也可能有少量数量）
-        assertTrue(amount1_2 > 0, "Amount1 should be positive");
-        // 注意：由于我们的简化 TickMath 实现，Token0 可能不为 0
-        // 在实际的 UniswapV3 中，当价格区间在当前价格上方时，Token0 应该为 0
+        // 验证上方价格区间的行为
+        // 当价格区间在当前价格上方时，amount1 应该为 0，amount0 应该大于 0
+        assertTrue(amount0_2 > 0, "Above current price range should need token0");
+        assertTrue(amount1_2 == 0, "Above current price range should not need token1");
     }
     
     /// @notice 测试 Tick 索引更新
@@ -508,6 +676,64 @@ contract UniswapV3PoolTest is Test {
         assertEq(tickLiquidity, liquidity, "Upper tick liquidity incorrect");
     }
     
+    /// @notice Fuzzing 测试：不同价格区间
+    function testFuzzMintDifferentRanges(
+        int24 lowerTick,
+        int24 upperTick,
+        uint128 liquidity
+    ) public {
+        // 设置合理的边界，避免溢出
+        vm.assume(lowerTick < upperTick);
+        vm.assume(lowerTick >= -1000 && upperTick <= 1000); // 限制 Tick 范围
+        vm.assume(upperTick - lowerTick <= 100); // 限制价格区间宽度
+        vm.assume(liquidity > 0 && liquidity < 1000000000);
+        
+        // 部署池子
+        uint160 initPrice = 79228162514264337593543950336; // 1.0 in Q64.96
+        pool = new UniswapV3Pool(address(token0), address(token1), initPrice, 0);
+        
+        // 给测试合约铸造代币
+        token0.mint(address(this), 100 ether);
+        token1.mint(address(this), 100 ether);
+        
+        // 设置回调标志
+        shouldTransferInCallback = true;
+        
+        // 编码回调数据
+        bytes memory data = abi.encode(
+            UniswapV3Pool.CallbackData({
+                token0: address(token0),
+                token1: address(token1),
+                payer: address(this)
+            })
+        );
+        
+        // 执行 mint 操作
+        (uint256 amount0, uint256 amount1) = pool.mint(
+            address(this), lowerTick, upperTick, liquidity, data
+        );
+        
+        // 验证基本属性
+        assertTrue(amount0 >= 0, "Token0 amount cannot be negative");
+        assertTrue(amount1 >= 0, "Token1 amount cannot be negative");
+        assertTrue(amount0 > 0 || amount1 > 0, "At least one token is needed");
+        
+        // 验证价格区间逻辑
+        (uint160 sqrtPriceX96, int24 currentTick) = pool.slot0();
+        if (currentTick < lowerTick) {
+            // 上方价格区间
+            assertTrue(amount0 > 0 && amount1 == 0, "Above current price range should only need token0");
+        } else if (currentTick >= lowerTick && currentTick < upperTick) {
+            // 包含当前价格
+            assertTrue(amount0 > 0, "Including current price should need token0");
+            // amount1 可能为 0，如果当前价格刚好在下边界
+            assertTrue(amount1 >= 0, "Including current price should have non-negative amount1");
+        } else {
+            // 下方价格区间
+            assertTrue(amount0 == 0 && amount1 > 0, "Below current price range should only need token1");
+        }
+    }
+
     /// @notice 测试 Fuzzing：随机价格区间
     function testFuzz_MintingRandomRanges(
         int24 lowerTick,

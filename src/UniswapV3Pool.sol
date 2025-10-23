@@ -7,6 +7,7 @@ import "./lib/TickBitmap.sol";
 import "./lib/Math.sol";
 import "./lib/TickMath.sol";
 import "./lib/SwapMath.sol";
+import "./lib/LiquidityMath.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IUniswapV3MintCallback.sol";
 import "./interfaces/IUniswapV3SwapCallback.sol";
@@ -138,6 +139,7 @@ contract UniswapV3Pool {
     // ============ 外部函数 ============
 
     /// @notice 在指定价格区间添加流动性
+    /// @dev 支持三种价格区间类型：上方、包含当前价格、下方
     /// @param owner 流动性仓位的所有者
     /// @param lowerTick 价格区间下限
     /// @param upperTick 价格区间上限
@@ -182,31 +184,51 @@ contract UniswapV3Pool {
         Position.Info storage position = positions.get(owner, lowerTick, upperTick);
         position.update(amount);
 
-        // 步骤 4: 动态计算代币数量
+        // 步骤 4: 根据价格区间位置计算代币数量
         // 获取当前价格状态
         Slot0 memory slot0_ = slot0;
 
-        // 动态计算所需的 Token0 数量
-        // 使用当前价格和上边界价格
-        amount0 = Math.calcAmount0Delta(
-            slot0_.sqrtPriceX96,
-            TickMath.getSqrtRatioAtTick(upperTick),
-            amount
-        );
+        if (slot0_.tick < lowerTick) {
+            // 情况1: 价格区间在当前价格之上
+            // 流动性完全由 token0 组成
+            amount0 = Math.calcAmount0Delta(
+                TickMath.getSqrtRatioAtTick(lowerTick),
+                TickMath.getSqrtRatioAtTick(upperTick),
+                amount
+            );
+            amount1 = 0;
 
-        // 动态计算所需的 Token1 数量
-        // 使用当前价格和下边界价格
-        amount1 = Math.calcAmount1Delta(
-            slot0_.sqrtPriceX96,
-            TickMath.getSqrtRatioAtTick(lowerTick),
-            amount
-        );
+        } else if (slot0_.tick < upperTick) {
+            // 情况2: 价格区间包含当前价格
+            // 流动性由两种代币按比例组成
+            amount0 = Math.calcAmount0Delta(
+                slot0_.sqrtPriceX96,
+                TickMath.getSqrtRatioAtTick(upperTick),
+                amount
+            );
 
-        // 步骤 5: 更新池子流动性
-        liquidity += uint128(amount);
+            amount1 = Math.calcAmount1Delta(
+                slot0_.sqrtPriceX96,
+                TickMath.getSqrtRatioAtTick(lowerTick),
+                amount
+            );
+
+            // 只有这种情况才更新流动性跟踪器
+            liquidity = LiquidityMath.addLiquidity(liquidity, int128(amount));
+
+        } else {
+            // 情况3: 价格区间在当前价格之下
+            // 流动性完全由 token1 组成
+            amount0 = 0;
+            amount1 = Math.calcAmount1Delta(
+                TickMath.getSqrtRatioAtTick(lowerTick),
+                TickMath.getSqrtRatioAtTick(upperTick),
+                amount
+            );
+        }
 
         // ==================== I: INTERACTIONS（交互）=============
-        // 步骤 6: 通过回调接收代币
+        // 步骤 5: 通过回调接收代币
         // 回调机制说明：
         // 1. 先记录当前余额
         // 2. 调用 msg.sender 的回调函数，告诉它需要转多少代币
@@ -222,7 +244,7 @@ contract UniswapV3Pool {
         IUniswapV3MintCallback(msg.sender).uniswapV3MintCallback(amount0, amount1, data);
 
         // ==================== C: CHECK（再次检查）===============
-        // 步骤 7: 验证余额变化
+        // 步骤 6: 验证余额变化
         // 确保调用者在回调中真的转入了代币
         if (amount0 > 0 && balance0() < balance0Before + amount0) {
             revert InsufficientInputAmount();
@@ -231,7 +253,7 @@ contract UniswapV3Pool {
             revert InsufficientInputAmount();
         }
 
-        // 步骤 8: 发出事件
+        // 步骤 7: 发出事件
         emit Mint(msg.sender, owner, lowerTick, upperTick, amount, amount0, amount1);
     }
 
