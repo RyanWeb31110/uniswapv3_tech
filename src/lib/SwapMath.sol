@@ -15,52 +15,50 @@ library SwapMath {
 
     // ============ 交换计算函数 ============
 
-    /// @notice 计算单次交换步骤
-    /// @dev 计算在给定价格区间内的交换金额
-    /// @param sqrtPriceCurrentX96 当前价格
-    /// @param sqrtPriceTargetX96 目标价格
-    /// @param liquidity 可用流动性
-    /// @param amountRemaining 剩余输入金额
-    /// @return sqrtPriceNextX96 交换后的新价格
-    /// @return amountIn 实际使用的输入金额
-    /// @return amountOut 计算出的输出金额
+    /// @notice 计算单步交换的输入输出金额和下一个价格
+    /// @param sqrtPriceCurrentX96 当前价格的平方根
+    /// @param sqrtPriceTargetX96 目标价格的平方根
+    /// @param liquidity 当前流动性
+    /// @param amountRemaining 剩余交换金额
+    /// @param zeroForOne 交换方向，true表示用token0换token1
+    /// @return sqrtPriceNextX96 交换后的价格平方根
+    /// @return amountIn 实际输入金额
+    /// @return amountOut 实际输出金额
     function computeSwapStep(
         uint160 sqrtPriceCurrentX96,
         uint160 sqrtPriceTargetX96,
         uint128 liquidity,
-        uint256 amountRemaining
-    )
-        internal
-        pure
-        returns (
-            uint160 sqrtPriceNextX96,
-            uint256 amountIn,
-            uint256 amountOut
-        )
-    {
-        // 确定交换方向
-        bool zeroForOne = sqrtPriceCurrentX96 >= sqrtPriceTargetX96;
+        uint256 amountRemaining,
+        bool zeroForOne
+    ) internal pure returns (uint160 sqrtPriceNextX96, uint256 amountIn, uint256 amountOut) {
+        // 计算当前价格区间能够满足的最大输入金额
+        uint256 amountInMax = zeroForOne
+            ? Math.calcAmount0Delta(
+                sqrtPriceCurrentX96,
+                sqrtPriceTargetX96,
+                liquidity
+            )
+            : Math.calcAmount1Delta(
+                sqrtPriceCurrentX96,
+                sqrtPriceTargetX96,
+                liquidity
+            );
 
-        // 计算交换后的新价格
-        sqrtPriceNextX96 = Math.getNextSqrtPriceFromInput(
-            sqrtPriceCurrentX96,
-            liquidity,
-            amountRemaining,
-            zeroForOne
-        );
-
-        // 确保新价格不会超过目标价格
-        if (zeroForOne) {
-            if (sqrtPriceNextX96 < sqrtPriceTargetX96) {
-                sqrtPriceNextX96 = sqrtPriceTargetX96;
-            }
+        // 判断当前区间是否有足够流动性满足整个交换
+        if (amountRemaining >= amountInMax) {
+            // 当前区间流动性不足，使用整个区间的流动性
+            sqrtPriceNextX96 = sqrtPriceTargetX96;
         } else {
-            if (sqrtPriceNextX96 > sqrtPriceTargetX96) {
-                sqrtPriceNextX96 = sqrtPriceTargetX96;
-            }
+            // 当前区间流动性充足，计算实际能达到的价格
+            sqrtPriceNextX96 = Math.getNextSqrtPriceFromInput(
+                sqrtPriceCurrentX96,
+                liquidity,
+                amountRemaining,
+                zeroForOne
+            );
         }
 
-        // 计算输入和输出金额
+        // 重新计算实际的输入输出金额
         if (zeroForOne) {
             amountIn = Math.calcAmount0Delta(
                 sqrtPriceCurrentX96,
@@ -83,35 +81,6 @@ library SwapMath {
                 sqrtPriceNextX96,
                 liquidity
             );
-        }
-
-        // 如果计算出的 amountIn 超过了剩余金额，则调整
-        if (amountIn > amountRemaining) {
-            amountIn = amountRemaining;
-            // 重新计算 amountOut
-            if (zeroForOne) {
-                sqrtPriceNextX96 = Math.getNextSqrtPriceFromAmount0RoundingUp(
-                    sqrtPriceCurrentX96,
-                    liquidity,
-                    amountIn
-                );
-                amountOut = Math.calcAmount1Delta(
-                    sqrtPriceCurrentX96,
-                    sqrtPriceNextX96,
-                    liquidity
-                );
-            } else {
-                sqrtPriceNextX96 = Math.getNextSqrtPriceFromAmount1RoundingDown(
-                    sqrtPriceCurrentX96,
-                    liquidity,
-                    amountIn
-                );
-                amountOut = Math.calcAmount0Delta(
-                    sqrtPriceCurrentX96,
-                    sqrtPriceNextX96,
-                    liquidity
-                );
-            }
         }
     }
 }

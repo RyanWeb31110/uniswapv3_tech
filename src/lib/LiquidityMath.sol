@@ -19,4 +19,19 @@ library LiquidityMath {
             require((z = x + uint128(y)) >= x, 'LA');
         }
     }
+
+    /// @notice 添加流动性变化量
+    /// @dev 处理流动性的增减变化
+    /// @param x 现有流动性
+    /// @param y 流动性变化量
+    /// @return z 变化后的流动性
+    function addDelta(uint128 x, int128 y) internal pure returns (uint128 z) {
+        if (y < 0) {
+            // 如果 y 是负数，相当于减去流动性
+            require((z = x - uint128(-y)) < x, 'LS');
+        } else {
+            // 如果 y 是正数，直接添加流动性
+            require((z = x + uint128(y)) >= x, 'LA');
+        }
+    }
 }

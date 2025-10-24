@@ -43,6 +43,7 @@ contract UniswapV3Pool {
         uint256 amountCalculated;         // 已计算出的输出金额
         uint160 sqrtPriceX96;             // 当前价格（Q64.96 格式）
         int24 tick;                       // 当前 Tick
+        uint128 liquidity;                // 当前流动性
     }
 
     /// @notice 交换步骤状态结构
@@ -53,6 +54,7 @@ contract UniswapV3Pool {
         uint160 sqrtPriceNextX96;  // 下一个 Tick 的价格
         uint256 amountIn;          // 当前步骤的输入金额
         uint256 amountOut;         // 当前步骤的输出金额
+        bool initialized;          // 下一个tick是否已初始化
     }
 
     // ============ 常量 ============
@@ -167,8 +169,8 @@ contract UniswapV3Pool {
         // 这样即使发生重入，重入者看到的也是最新状态
 
         // 步骤 2: 更新 Tick 和位图索引
-        bool flippedLower = ticks.update(lowerTick, amount);
-        bool flippedUpper = ticks.update(upperTick, amount);
+        bool flippedLower = ticks.update(lowerTick, int128(amount), false);
+        bool flippedUpper = ticks.update(upperTick, int128(amount), true);
         
         // 如果下边界 Tick 状态发生翻转，更新位图索引
         if (flippedLower) {
@@ -291,7 +293,8 @@ contract UniswapV3Pool {
             amountSpecifiedRemaining: amountSpecified,
             amountCalculated: 0,
             sqrtPriceX96: slot0_.sqrtPriceX96,
-            tick: slot0_.tick
+            tick: slot0_.tick,
+            liquidity: liquidity
         });
 
         // 主循环：直到处理完所有输入金额
@@ -301,8 +304,8 @@ contract UniswapV3Pool {
             // 设置当前步骤的起始价格
             step.sqrtPriceStartX96 = state.sqrtPriceX96;
 
-            // 查找下一个已初始化的 Tick
-            (step.nextTick, ) = tickBitmap.nextInitializedTickWithinOneWord(
+            // 获取下一个初始化的tick和是否已初始化的标志
+            (step.nextTick, step.initialized) = tickBitmap.nextInitializedTickWithinOneWord(
                 state.tick,
                 1,        // tickSpacing = 1
                 zeroForOne
@@ -316,20 +319,50 @@ contract UniswapV3Pool {
                 .computeSwapStep(
                     state.sqrtPriceX96,
                     step.sqrtPriceNextX96,
-                    liquidity,
-                    state.amountSpecifiedRemaining
+                    state.liquidity,
+                    state.amountSpecifiedRemaining,
+                    zeroForOne
                 );
 
             // 更新交换状态
             state.amountSpecifiedRemaining -= step.amountIn;
             state.amountCalculated += step.amountOut;
-            state.tick = TickMath.getTickAtSqrtRatio(state.sqrtPriceX96);
+
+            // 检查是否到达了价格区间边界
+            if (state.sqrtPriceX96 == step.sqrtPriceNextX96) {
+                // 到达边界，需要处理tick交叉
+                if (step.initialized) {
+                    // 获取tick交叉时的流动性变化
+                    int128 liquidityDelta = ticks.cross(step.nextTick);
+
+                    // 根据交换方向调整流动性变化符号
+                    if (zeroForOne) liquidityDelta = -liquidityDelta;
+
+                    // 更新当前流动性
+                    state.liquidity = LiquidityMath.addLiquidity(
+                        state.liquidity,
+                        liquidityDelta
+                    );
+
+                    // 检查流动性是否为零
+                    if (state.liquidity == 0) revert ZeroLiquidity();
+                }
+
+                // 更新当前tick
+                state.tick = zeroForOne ? step.nextTick - 1 : step.nextTick;
+            } else {
+                // 价格仍在当前区间内，根据新价格计算tick
+                state.tick = TickMath.getTickAtSqrtRatio(state.sqrtPriceX96);
+            }
         }
 
         // 更新池子状态
         if (state.tick != slot0_.tick) {
             (slot0.sqrtPriceX96, slot0.tick) = (state.sqrtPriceX96, state.tick);
         }
+
+        // 更新全局流动性变量
+        if (liquidity != state.liquidity) liquidity = state.liquidity;
 
         // 计算最终的交换金额
         (amount0, amount1) = zeroForOne

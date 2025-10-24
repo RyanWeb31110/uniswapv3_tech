@@ -174,12 +174,12 @@ contract UniswapV3PoolTest is Test {
         assertEq(posLiquidity, params.liquidity, "incorrect position liquidity");
 
         // 6. 验证下限 Tick
-        (bool tickInitialized, uint128 tickLiquidity) = pool.ticks(params.lowerTick);
+        (bool tickInitialized, uint128 tickLiquidity, int128 tickLiquidityNet) = pool.ticks(params.lowerTick);
         assertTrue(tickInitialized, "lower tick not initialized");
         assertEq(tickLiquidity, params.liquidity, "incorrect lower tick liquidity");
 
         // 7. 验证上限 Tick
-        (tickInitialized, tickLiquidity) = pool.ticks(params.upperTick);
+        (tickInitialized, tickLiquidity, tickLiquidityNet) = pool.ticks(params.upperTick);
         assertTrue(tickInitialized, "upper tick not initialized");
         assertEq(tickLiquidity, params.liquidity, "incorrect upper tick liquidity");
 
@@ -667,11 +667,11 @@ contract UniswapV3PoolTest is Test {
         pool.mint(address(this), lowerTick, upperTick, liquidity, data);
         
         // 验证 Tick 信息已正确存储
-        (bool initialized, uint128 tickLiquidity) = pool.ticks(lowerTick);
+        (bool initialized, uint128 tickLiquidity, int128 tickLiquidityNet) = pool.ticks(lowerTick);
         assertTrue(initialized, "Lower tick should be initialized");
         assertEq(tickLiquidity, liquidity, "Lower tick liquidity incorrect");
         
-        (initialized, tickLiquidity) = pool.ticks(upperTick);
+        (initialized, tickLiquidity, tickLiquidityNet) = pool.ticks(upperTick);
         assertTrue(initialized, "Upper tick should be initialized");
         assertEq(tickLiquidity, liquidity, "Upper tick liquidity incorrect");
     }
