@@ -3,6 +3,7 @@ pragma solidity ^0.8.14;
 
 import "forge-std/Test.sol";
 import "../src/UniswapV3Pool.sol";
+import "../src/lib/TickMath.sol";
 import "./ERC20Mintable.sol";
 
 /// @title 跨Tick交换测试合约
@@ -84,7 +85,7 @@ contract CrossTickSwapTest is Test {
         pool.mint(alice, lowerTick, upperTick, liquidity, data);
 
         // 执行小额交换（购买ETH）
-        pool.swap(alice, false, 42 ether, data);
+        pool.swap(alice, false, 42 ether, TickMath.MAX_SQRT_RATIO - 1, data);
 
         // 验证交换结果
         (uint160 sqrtPriceX96, int24 tick) = pool.slot0();
@@ -127,7 +128,7 @@ contract CrossTickSwapTest is Test {
         pool.mint(alice, lowerTick2, upperTick2, liquidity2, data);
 
         // 执行大额交换（购买ETH），应该跨越两个价格区间
-        pool.swap(alice, false, 10000 ether, data);
+        pool.swap(alice, false, 10000 ether, TickMath.MAX_SQRT_RATIO - 1, data);
 
         // 验证交换结果
         (uint160 sqrtPriceX96, int24 tick) = pool.slot0();
@@ -170,7 +171,7 @@ contract CrossTickSwapTest is Test {
         pool.mint(alice, lowerTick2, upperTick2, liquidity2, data);
 
         // 执行交换（购买ETH）
-        pool.swap(alice, false, 10000 ether, data);
+        pool.swap(alice, false, 10000 ether, TickMath.MAX_SQRT_RATIO - 1, data);
 
         // 验证交换结果
         (uint160 sqrtPriceX96, int24 tick) = pool.slot0();
@@ -206,7 +207,7 @@ contract CrossTickSwapTest is Test {
 
         // 尝试执行超大额交换，应该失败
         vm.expectRevert();
-        pool.swap(alice, false, 1000000 ether, data);
+        pool.swap(alice, false, 1000000 ether, TickMath.MAX_SQRT_RATIO - 1, data);
 
         vm.stopPrank();
     }

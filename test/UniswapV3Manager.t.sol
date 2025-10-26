@@ -4,6 +4,7 @@ pragma solidity ^0.8.14;
 import "forge-std/Test.sol";
 import "../src/UniswapV3Manager.sol";
 import "../src/UniswapV3Pool.sol";
+import "../src/lib/TickMath.sol";
 import "./ERC20Mintable.sol";
 
 /// @title UniswapV3Manager 测试合约
@@ -94,7 +95,7 @@ contract UniswapV3ManagerTest is Test {
 
         // Alice 通过 Manager 添加流动性
         (uint256 amount0, uint256 amount1) =
-            manager.mint(address(pool), lowerTick, upperTick, liquidity, data);
+            manager.mintWithLiquidity(address(pool), lowerTick, upperTick, liquidity, data);
 
         vm.stopPrank();
 
@@ -142,7 +143,7 @@ contract UniswapV3ManagerTest is Test {
         // Alice 没有 approve，尝试添加流动性应该失败
         vm.prank(alice);
         vm.expectRevert();
-        manager.mint(address(pool), lowerTick, upperTick, liquidity, data);
+        manager.mintWithLiquidity(address(pool), lowerTick, upperTick, liquidity, data);
     }
 
     /// @notice 测试多个用户同时提供流动性
@@ -170,7 +171,7 @@ contract UniswapV3ManagerTest is Test {
             })
         );
 
-        manager.mint(address(pool), lowerTick, upperTick, liquidity, dataAlice);
+        manager.mintWithLiquidity(address(pool), lowerTick, upperTick, liquidity, dataAlice);
         vm.stopPrank();
 
         // Bob 添加流动性
@@ -186,7 +187,7 @@ contract UniswapV3ManagerTest is Test {
             })
         );
 
-        manager.mint(address(pool), lowerTick, upperTick, liquidity, dataBob);
+        manager.mintWithLiquidity(address(pool), lowerTick, upperTick, liquidity, dataBob);
         vm.stopPrank();
 
         // 验证两个用户的仓位都被记录
@@ -225,7 +226,7 @@ contract UniswapV3ManagerTest is Test {
         uint256 bobToken1Before = token1.balanceOf(bob);
 
         // 6. Bob 通过 Manager 执行交换
-        (int256 amount0, int256 amount1) = manager.swap(address(pool), true, 1 ether, data);
+        (int256 amount0, int256 amount1) = manager.swap(address(pool), true, 1 ether, TickMath.MIN_SQRT_RATIO + 1, data);
 
         vm.stopPrank();
 
@@ -273,7 +274,7 @@ contract UniswapV3ManagerTest is Test {
 
         // 5. 交换应该失败
         vm.expectRevert();
-        manager.swap(address(pool), true, 1 ether, data);
+        manager.swap(address(pool), true, 1 ether, TickMath.MIN_SQRT_RATIO + 1, data);
 
         vm.stopPrank();
     }
@@ -304,6 +305,6 @@ contract UniswapV3ManagerTest is Test {
         );
 
         // 添加流动性
-        manager.mint(address(pool), lowerTick, upperTick, liquidity, data);
+        manager.mintWithLiquidity(address(pool), lowerTick, upperTick, liquidity, data);
     }
 }

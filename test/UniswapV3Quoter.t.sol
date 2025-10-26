@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import "../src/UniswapV3Quoter.sol";
 import "../src/UniswapV3Pool.sol";
 import "../src/UniswapV3Manager.sol";
+import "../src/lib/TickMath.sol";
 import "./ERC20Mintable.sol";
 
 /// @title UniswapV3QuoterTest
@@ -137,6 +138,7 @@ contract UniswapV3QuoterTest is Test {
             address(pool),
             true,
             1000 * 10**18,
+            TickMath.MIN_SQRT_RATIO + 1,
             abi.encode(callbackData)
         );
         vm.stopPrank();
@@ -245,7 +247,7 @@ contract UniswapV3QuoterTest is Test {
         });
         
         // 添加流动性
-        manager.mint(
+        manager.mintWithLiquidity(
             address(pool),
             MIN_TICK,
             MAX_TICK,

@@ -3,11 +3,26 @@ pragma solidity ^0.8.14;
 
 import "./UniswapV3Pool.sol";
 import "./interfaces/IERC20.sol";
+import "./lib/TickMath.sol";
+import "./lib/LiquidityMath.sol";
 
 /// @title Uniswap V3 管理合约
 /// @notice 为核心池合约提供用户友好的接口
 /// @dev 作为用户和池合约之间的中介，处理代币授权和转移
 contract UniswapV3Manager {
+    // ==================== 数据结构 ====================
+
+    /// @notice 添加流动性的参数
+    struct MintParams {
+        address poolAddress;      // 池子地址
+        int24 lowerTick;          // 价格区间下界（tick 值）
+        int24 upperTick;          // 价格区间上界（tick 值）
+        uint256 amount0Desired;   // 期望投入的 token0 数量
+        uint256 amount1Desired;   // 期望投入的 token1 数量
+        uint256 amount0Min;       // 最小可接受的 token0 数量（滑点保护）
+        uint256 amount1Min;       // 最小可接受的 token1 数量（滑点保护）
+    }
+
     // ==================== 错误定义 ====================
 
     /// @notice 滑点保护失败
@@ -18,7 +33,55 @@ contract UniswapV3Manager {
 
     // ==================== 外部函数 ====================
 
-    /// @notice 向指定池提供流动性
+    /// @notice 向指定池提供流动性（带滑点保护）
+    /// @dev 用户需要先 approve 足够的代币给本合约
+    /// @param params 添加流动性的参数
+    /// @return amount0 实际使用的 token0 数量
+    /// @return amount1 实际使用的 token1 数量
+    function mint(MintParams calldata params)
+        public
+        returns (uint256 amount0, uint256 amount1)
+    {
+        // 获取池子合约实例
+        UniswapV3Pool pool = UniswapV3Pool(params.poolAddress);
+
+        // 获取当前价格
+        (uint160 sqrtPriceX96, ) = pool.slot0();
+
+        // 计算价格区间的平方根价格
+        uint160 sqrtPriceLowerX96 = TickMath.getSqrtRatioAtTick(params.lowerTick);
+        uint160 sqrtPriceUpperX96 = TickMath.getSqrtRatioAtTick(params.upperTick);
+
+        // 根据期望投入的代币数量计算流动性
+        uint128 liquidity = LiquidityMath.getLiquidityForAmounts(
+            sqrtPriceX96,
+            sqrtPriceLowerX96,
+            sqrtPriceUpperX96,
+            params.amount0Desired,
+            params.amount1Desired
+        );
+
+        // 调用池子的 mint 函数添加流动性
+        (amount0, amount1) = pool.mint(
+            msg.sender,
+            params.lowerTick,
+            params.upperTick,
+            liquidity,
+            abi.encode(
+                UniswapV3Pool.CallbackData({
+                    token0: pool.token0(),
+                    token1: pool.token1(),
+                    payer: msg.sender
+                })
+            )
+        );
+
+        // 滑点保护：验证实际投入的代币数量不低于最小值
+        if (amount0 < params.amount0Min || amount1 < params.amount1Min)
+            revert SlippageCheckFailed(amount0, amount1);
+    }
+
+    /// @notice 向指定池提供流动性（旧版本，保持向后兼容）
     /// @dev 用户需要先 approve 足够的代币给本合约
     /// @param poolAddress_ 目标池合约地址
     /// @param lowerTick 价格区间下界（Tick）
@@ -27,7 +90,7 @@ contract UniswapV3Manager {
     /// @param data 额外数据（传递给池合约的回调）
     /// @return amount0 实际使用的 token0 数量
     /// @return amount1 实际使用的 token1 数量
-    function mint(
+    function mintWithLiquidity(
         address poolAddress_,
         int24 lowerTick,
         int24 upperTick,
@@ -50,13 +113,15 @@ contract UniswapV3Manager {
     /// @param poolAddress_ 目标池合约地址
     /// @param zeroForOne 交换方向标志
     /// @param amountSpecified 用户指定的输入金额
+    /// @param sqrtPriceLimitX96 价格限制（Q64.96 格式的平方根价格）
     /// @param data 额外数据（传递给池合约的回调）
     /// @return amount0 token0 的变化量
     /// @return amount1 token1 的变化量
     function swap(
-        address poolAddress_, 
+        address poolAddress_,
         bool zeroForOne,
         uint256 amountSpecified,
+        uint160 sqrtPriceLimitX96,
         bytes calldata data
     ) public returns (int256 amount0, int256 amount1) {
         // 将调用转发到池合约
@@ -65,6 +130,7 @@ contract UniswapV3Manager {
             msg.sender, // recipient: 用户地址
             zeroForOne,
             amountSpecified,
+            sqrtPriceLimitX96,
             data
         );
     }

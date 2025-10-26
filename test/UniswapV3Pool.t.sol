@@ -4,6 +4,7 @@ pragma solidity ^0.8.14;
 import "forge-std/Test.sol";
 import "./ERC20Mintable.sol";
 import "../src/UniswapV3Pool.sol";
+import "../src/lib/TickMath.sol";
 
 /// @title UniswapV3Pool 测试合约
 contract UniswapV3PoolTest is Test {
@@ -819,7 +820,7 @@ contract UniswapV3PoolTest is Test {
             })
         );
 
-        (int256 amount0Delta, int256 amount1Delta) = pool.swap(address(this), true, 1 ether, swapData);
+        (int256 amount0Delta, int256 amount1Delta) = pool.swap(address(this), true, 1 ether, TickMath.MIN_SQRT_RATIO + 1, swapData);
 
         // ==================== 步骤 4: 验证交换数量 ====================
 
@@ -905,6 +906,7 @@ contract UniswapV3PoolTest is Test {
             address(this), // recipient
             zeroForOne,
             swapAmount,
+            TickMath.MIN_SQRT_RATIO + 1, // sqrtPriceLimitX96
             "" // 空数据
         );
 
@@ -953,6 +955,7 @@ contract UniswapV3PoolTest is Test {
             address(this), // recipient
             zeroForOne,
             swapAmount,
+            TickMath.MAX_SQRT_RATIO - 1, // sqrtPriceLimitX96
             "" // 空数据
         );
 
@@ -992,6 +995,7 @@ contract UniswapV3PoolTest is Test {
             address(this),
             true, // zeroForOne = true
             smallAmount,
+            TickMath.MIN_SQRT_RATIO + 1, // sqrtPriceLimitX96
             ""
         );
 
@@ -1025,7 +1029,7 @@ contract UniswapV3PoolTest is Test {
         // 执行交换
         uint256 swapAmount = 1 ether;
 
-        pool.swap(address(this), true, swapAmount, "");
+        pool.swap(address(this), true, swapAmount, TickMath.MIN_SQRT_RATIO + 1, "");
 
         // 记录交换后的价格
         (uint160 sqrtPriceX96After, int24 tickAfter) = pool.slot0();

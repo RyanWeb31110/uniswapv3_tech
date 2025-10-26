@@ -99,6 +99,7 @@ contract UniswapV3Pool {
     error InvalidTickRange();
     error ZeroLiquidity();
     error InsufficientInputAmount();
+    error InvalidPriceLimit();
 
     // ============ 事件定义 ============
 
@@ -276,6 +277,7 @@ contract UniswapV3Pool {
     /// @param recipient 接收输出代币的地址
     /// @param zeroForOne 交换方向标志
     /// @param amountSpecified 用户指定的输入金额
+    /// @param sqrtPriceLimitX96 价格限制（Q64.96 格式的平方根价格）
     /// @param data 回调函数的额外数据
     /// @return amount0 token0 的数量变化
     /// @return amount1 token1 的数量变化
@@ -283,10 +285,24 @@ contract UniswapV3Pool {
         address recipient,
         bool zeroForOne,
         uint256 amountSpecified,
+        uint160 sqrtPriceLimitX96,
         bytes calldata data
     ) public returns (int256 amount0, int256 amount1) {
         // 获取当前池子状态
         Slot0 memory slot0_ = slot0;
+
+        // 验证价格限制的有效性
+        if (
+            zeroForOne
+                // 卖出 token0（zeroForOne = true）时，价格会下跌
+                // 限制价格必须小于当前价格，且大于最小允许价格
+                ? sqrtPriceLimitX96 > slot0_.sqrtPriceX96 ||
+                    sqrtPriceLimitX96 < TickMath.MIN_SQRT_RATIO
+                // 卖出 token1（zeroForOne = false）时，价格会上涨
+                // 限制价格必须大于当前价格，且小于最大允许价格
+                : sqrtPriceLimitX96 < slot0_.sqrtPriceX96 ||
+                    sqrtPriceLimitX96 > TickMath.MAX_SQRT_RATIO
+        ) revert InvalidPriceLimit();
 
         // 初始化交换状态
         SwapState memory state = SwapState({
@@ -297,8 +313,14 @@ contract UniswapV3Pool {
             liquidity: liquidity
         });
 
-        // 主循环：直到处理完所有输入金额
-        while (state.amountSpecifiedRemaining > 0) {
+        // 主循环：直到处理完所有输入金额或达到价格限制
+        // 注意：使用范围比较而非精确相等，因为价格可能跨越限制价格
+        while (
+            state.amountSpecifiedRemaining > 0 &&
+            (zeroForOne
+                ? state.sqrtPriceX96 > sqrtPriceLimitX96  // 卖出 token0：价格下跌，只要当前价格 > 限制价格就继续
+                : state.sqrtPriceX96 < sqrtPriceLimitX96) // 卖出 token1：价格上涨，只要当前价格 < 限制价格就继续
+        ) {
             StepState memory step;
 
             // 设置当前步骤的起始价格
@@ -318,7 +340,17 @@ contract UniswapV3Pool {
             (state.sqrtPriceX96, step.amountIn, step.amountOut) = SwapMath
                 .computeSwapStep(
                     state.sqrtPriceX96,
-                    step.sqrtPriceNextX96,
+                    (
+                        zeroForOne
+                            // 卖出 token0 时，价格下跌
+                            // 如果下一个 tick 的价格低于限制价格，使用限制价格作为目标
+                            ? step.sqrtPriceNextX96 < sqrtPriceLimitX96
+                            // 卖出 token1 时，价格上涨
+                            // 如果下一个 tick 的价格高于限制价格，使用限制价格作为目标
+                            : step.sqrtPriceNextX96 > sqrtPriceLimitX96
+                    )
+                        ? sqrtPriceLimitX96      // 使用限制价格
+                        : step.sqrtPriceNextX96, // 使用下一个 tick 的价格
                     state.liquidity,
                     state.amountSpecifiedRemaining,
                     zeroForOne

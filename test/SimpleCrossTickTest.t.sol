@@ -3,6 +3,7 @@ pragma solidity ^0.8.14;
 
 import "forge-std/Test.sol";
 import "../src/UniswapV3Pool.sol";
+import "../src/lib/TickMath.sol";
 import "./ERC20Mintable.sol";
 
 /// @title 简单跨Tick交换测试
@@ -70,7 +71,7 @@ contract SimpleCrossTickTest is Test {
         console.log("Before swap - Liquidity:", liquidityBefore);
 
         // 执行大额交换（购买ETH），应该跨越两个价格区间
-        pool.swap(address(this), false, 1000 ether, data);
+        pool.swap(address(this), false, 1000 ether, TickMath.MAX_SQRT_RATIO - 1, data);
 
         // 记录交换后的状态
         (uint160 sqrtPriceX96After, int24 tickAfter) = pool.slot0();
@@ -120,7 +121,7 @@ contract SimpleCrossTickTest is Test {
         console.log("Before swap - Liquidity:", liquidityBefore);
 
         // 执行小额交换（购买ETH）
-        pool.swap(address(this), false, 42 ether, data);
+        pool.swap(address(this), false, 42 ether, TickMath.MAX_SQRT_RATIO - 1, data);
 
         // 记录交换后的状态
         (uint160 sqrtPriceX96After, int24 tickAfter) = pool.slot0();

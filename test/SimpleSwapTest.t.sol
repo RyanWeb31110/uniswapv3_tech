@@ -3,6 +3,7 @@ pragma solidity ^0.8.14;
 
 import "forge-std/Test.sol";
 import "../src/UniswapV3Pool.sol";
+import "../src/lib/TickMath.sol";
 import "./ERC20Mintable.sol";
 
 /// @title 简单交换测试
@@ -62,7 +63,8 @@ contract SimpleSwapTest is Test {
         console.log("Before swap - Liquidity:", liquidityBefore);
 
         // 执行小额交换（购买ETH）
-        pool.swap(address(this), false, 42 ether, data);
+        // 使用最大价格作为限制（允许最大滑点）
+        pool.swap(address(this), false, 42 ether, TickMath.MAX_SQRT_RATIO - 1, data);
 
         // 记录交换后的状态
         (uint160 sqrtPriceX96After, int24 tickAfter) = pool.slot0();
