@@ -4,7 +4,7 @@ pragma solidity ^0.8.14;
 import "./UniswapV3Pool.sol";
 import "./interfaces/IERC20.sol";
 import "./lib/TickMath.sol";
-import "./lib/LiquidityMath.sol";
+import "./lib/LiquidityAmounts.sol";
 
 /// @title Uniswap V3 管理合约
 /// @notice 为核心池合约提供用户友好的接口
@@ -53,7 +53,7 @@ contract UniswapV3Manager {
         uint160 sqrtPriceUpperX96 = TickMath.getSqrtRatioAtTick(params.upperTick);
 
         // 根据期望投入的代币数量计算流动性
-        uint128 liquidity = LiquidityMath.getLiquidityForAmounts(
+        uint128 liquidity = LiquidityAmounts.getLiquidityForAmounts(
             sqrtPriceX96,
             sqrtPriceLowerX96,
             sqrtPriceUpperX96,

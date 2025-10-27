@@ -1,0 +1,14 @@
+{
+  "lib/forge-std": {
+    "rev": "8bbcf6e3f8f62f419e5429a0bd89331c85c37824"
+  },
+  "lib/prb-math": {
+    "branch": {
+      "name": "v4",
+      "rev": "39eec818282a29df7406b8280b29c084c9a3f3b5"
+    }
+  },
+  "lib/solmate": {
+    "rev": "89365b880c4f3c786bdd453d4b8e8fe410344a69"
+  }
+}
