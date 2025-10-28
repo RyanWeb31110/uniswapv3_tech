@@ -11,6 +11,7 @@ import "./lib/LiquidityMath.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IUniswapV3MintCallback.sol";
 import "./interfaces/IUniswapV3SwapCallback.sol";
+import "./interfaces/IUniswapV3FlashCallback.sol";
 
 /// @title UniswapV3Pool
 /// @notice 实现 Uniswap V3 的核心交易池逻辑
@@ -123,6 +124,18 @@ contract UniswapV3Pool {
         uint160 sqrtPriceX96,
         uint128 liquidity,
         int24 tick
+    );
+
+    /// @notice 闪电贷事件
+    /// @param sender 调用者地址
+    /// @param recipient 接收代币的地址
+    /// @param amount0 借出的 token0 数量
+    /// @param amount1 借出的 token1 数量
+    event Flash(
+        address indexed sender,
+        address indexed recipient,
+        uint256 amount0,
+        uint256 amount1
     );
 
     // ============ 构造函数 ============
@@ -436,8 +449,59 @@ contract UniswapV3Pool {
 
         // 发出交换事件
         emit Swap(
-            msg.sender, recipient, amount0, amount1, 
+            msg.sender, recipient, amount0, amount1,
             slot0.sqrtPriceX96, liquidity, slot0.tick
         );
+    }
+
+    /// @notice 执行闪电贷
+    /// @dev 任何人都可以调用此函数借出代币，但必须在回调中归还
+    ///      闪电贷的核心机制：
+    ///      1. 先无条件转出代币给借款人
+    ///      2. 调用借款人的回调函数，让其执行操作并归还代币
+    ///      3. 验证余额是否足够（必须 >= 贷前余额）
+    ///      4. 如果余额不足，整个交易回滚，代币不会丢失
+    /// @param recipient 接收代币的地址
+    /// @param amount0 请求借出的 token0 数量
+    /// @param amount1 请求借出的 token1 数量
+    /// @param data 传递给回调函数的自定义数据
+    function flash(
+        address recipient,
+        uint256 amount0,
+        uint256 amount1,
+        bytes calldata data
+    ) public {
+        // 步骤1: 记录贷款前的余额
+        // 这是验证还款的关键——贷后余额必须大于等于贷前余额
+        uint256 balance0Before = balance0();
+        uint256 balance1Before = balance1();
+
+        // 步骤2: 转出代币给借款人
+        // 注意：这里是无条件转出，不检查任何抵押品
+        // 依赖原子性保证：如果最后验证失败，整个交易回滚
+        if (amount0 > 0) IERC20(token0).transfer(recipient, amount0);
+        if (amount1 > 0) IERC20(token1).transfer(recipient, amount1);
+
+        // 步骤3: 调用借款人合约的回调函数
+        // 借款人需要在这个回调中：
+        // 1. 使用借到的代币执行操作（套利、清算等）
+        // 2. 归还代币到本合约
+        // 注意：回调的调用者是 msg.sender（发起闪电贷的地址）
+        IUniswapV3FlashCallback(msg.sender).uniswapV3FlashCallback(data);
+
+        // 步骤4: 验证还款
+        // 检查当前余额是否大于等于贷款前余额
+        // 如果借款人没有还钱，这里会回滚整个交易
+        require(
+            balance0() >= balance0Before,
+            "Flash loan not repaid: token0"
+        );
+        require(
+            balance1() >= balance1Before,
+            "Flash loan not repaid: token1"
+        );
+
+        // 步骤5: 触发事件
+        emit Flash(msg.sender, recipient, amount0, amount1);
     }
 }

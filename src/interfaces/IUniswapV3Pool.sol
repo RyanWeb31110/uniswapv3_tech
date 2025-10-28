@@ -33,4 +33,22 @@ interface IUniswapV3Pool {
         uint256 amountSpecified,
         bytes calldata data
     ) external returns (int256 amount0, int256 amount1);
+
+    /// @notice 执行闪电贷
+    /// @param recipient 接收代币的地址
+    /// @param amount0 请求借出的 token0 数量
+    /// @param amount1 请求借出的 token1 数量
+    /// @param data 传递给回调函数的自定义数据
+    function flash(
+        address recipient,
+        uint256 amount0,
+        uint256 amount1,
+        bytes calldata data
+    ) external;
+
+    /// @notice 获取 token0 地址
+    function token0() external view returns (address);
+
+    /// @notice 获取 token1 地址
+    function token1() external view returns (address);
 }

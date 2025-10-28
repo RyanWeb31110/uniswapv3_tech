@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 900">
+  <!-- 定义样式 -->
+  <defs>
+    <style>
+      .entity-box {
+        fill: #4A90E2;
+        stroke: #2E5C8A;
+        stroke-width: 2;
+      }
+      .entity-text {
+        fill: white;
+        font-family: Arial, sans-serif;
+        font-size: 16px;
+        font-weight: bold;
+        text-anchor: middle;
+      }
+      .arrow {
+        stroke: #333;
+        stroke-width: 2;
+        fill: none;
+        marker-end: url(#arrowhead);
+      }
+      .arrow-text {
+        fill: #333;
+        font-family: Arial, sans-serif;
+        font-size: 13px;
+      }
+      .step-number {
+        fill: #E74C3C;
+        font-weight: bold;
+      }
+      .note-text {
+        fill: #555;
+        font-family: Arial, sans-serif;
+        font-size: 12px;
+        font-style: italic;
+      }
+      .dashed-arrow {
+        stroke: #666;
+        stroke-width: 2;
+        stroke-dasharray: 5,5;
+        fill: none;
+        marker-end: url(#arrowhead-dashed);
+      }
+    </style>
+
+    <!-- 箭头标记 -->
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#333" />
+    </marker>
+    <marker id="arrowhead-dashed" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#666" />
+    </marker>
+  </defs>
+
+  <!-- 标题 -->
+  <text x="400" y="30" style="font-size: 20px; font-weight: bold; text-anchor: middle; fill: #2C3E50;">
+    闪电贷执行流程
+  </text>
+
+  <!-- 三个实体框 -->
+  <!-- 用户合约 -->
+  <rect x="50" y="60" width="120" height="50" class="entity-box" rx="5"/>
+  <text x="110" y="90" class="entity-text">用户合约</text>
+
+  <!-- Pool 合约 -->
+  <rect x="340" y="60" width="120" height="50" class="entity-box" rx="5"/>
+  <text x="400" y="90" class="entity-text">Pool 合约</text>
+
+  <!-- 代币合约 -->
+  <rect x="630" y="60" width="120" height="50" class="entity-box" rx="5"/>
+  <text x="690" y="90" class="entity-text">代币合约</text>
+
+  <!-- 垂直时间线 -->
+  <line x1="110" y1="110" x2="110" y2="850" stroke="#ddd" stroke-width="2"/>
+  <line x1="400" y1="110" x2="400" y2="850" stroke="#ddd" stroke-width="2"/>
+  <line x1="690" y1="110" x2="690" y2="850" stroke="#ddd" stroke-width="2"/>
+
+  <!-- (1) flash() -->
+  <path d="M 110 140 L 390 140" class="arrow"/>
+  <text x="150" y="135" class="arrow-text">
+    <tspan class="step-number">(1)</tspan> flash()
+  </text>
+
+  <!-- (2) balanceOf() -->
+  <path d="M 400 180 L 680 180" class="arrow"/>
+  <text x="450" y="175" class="arrow-text">
+    <tspan class="step-number">(2)</tspan> balanceOf()
+  </text>
+
+  <!-- 返回 balance0Before -->
+  <path d="M 680 210 L 410 210" class="dashed-arrow"/>
+  <text x="450" y="225" class="arrow-text" style="font-size: 11px;">balance0Before</text>
+
+  <!-- (3) transfer() -->
+  <path d="M 400 260 L 680 260" class="arrow"/>
+  <text x="450" y="255" class="arrow-text">
+    <tspan class="step-number">(3)</tspan> transfer()
+  </text>
+
+  <!-- 代币返回给用户 -->
+  <path d="M 680 290 L 120 290" class="dashed-arrow"/>
+  <text x="350" y="305" class="arrow-text" style="font-size: 11px;">amount0 代币</text>
+
+  <!-- (4) 回调 -->
+  <path d="M 390 340 L 120 340" class="arrow"/>
+  <text x="200" y="335" class="arrow-text">
+    <tspan class="step-number">(4)</tspan> 回调
+  </text>
+
+  <!-- (5) 使用代币执行操作 -->
+  <rect x="30" y="370" width="160" height="80" fill="#FFF3CD" stroke="#FFD700" stroke-width="2" rx="5"/>
+  <text x="110" y="395" class="note-text" text-anchor="middle">
+    <tspan x="110" dy="0">(5) 使用代币执行操作</tspan>
+    <tspan x="110" dy="18">(例如:套利、</tspan>
+    <tspan x="110" dy="18">清算等)</tspan>
+  </text>
+
+  <!-- (6) transfer() 归还代币 -->
+  <path d="M 110 480 L 680 480" class="arrow"/>
+  <text x="300" y="475" class="arrow-text">
+    <tspan class="step-number">(6)</tspan> transfer() (归还代币)
+  </text>
+
+  <!-- 回调结束 -->
+  <path d="M 120 530 L 390 530" class="arrow"/>
+  <text x="200" y="525" class="arrow-text">回调结束</text>
+
+  <!-- (7) balanceOf() -->
+  <path d="M 400 580 L 680 580" class="arrow"/>
+  <text x="450" y="575" class="arrow-text">
+    <tspan class="step-number">(7)</tspan> balanceOf()
+  </text>
+
+  <!-- 返回 balance0After -->
+  <path d="M 680 610 L 410 610" class="dashed-arrow"/>
+  <text x="480" y="625" class="arrow-text" style="font-size: 11px;">balance0After</text>
+
+  <!-- (8) 验证 -->
+  <rect x="300" y="650" width="200" height="60" fill="#D4EDDA" stroke="#28A745" stroke-width="2" rx="5"/>
+  <text x="400" y="675" class="note-text" text-anchor="middle">
+    <tspan x="400" dy="0">(8) 验证:</tspan>
+    <tspan x="400" dy="18">balance0After ≥ balance0Before</tspan>
+  </text>
+
+  <!-- flash 成功 -->
+  <path d="M 390 760 L 120 760" class="arrow"/>
+  <text x="200" y="755" class="arrow-text" style="fill: #28A745; font-weight: bold;">
+    flash 成功
+  </text>
+
+  <!-- 底部说明 -->
+  <rect x="50" y="800" width="700" height="60" fill="#F8F9FA" stroke="#DEE2E6" stroke-width="1" rx="3"/>
+  <text x="400" y="825" style="font-size: 12px; text-anchor: middle; fill: #666;">
+    <tspan x="400" dy="0">关键要点:先转出代币,后验证还款。如果验证失败,整个交易回滚,确保资金安全。</tspan>
+    <tspan x="400" dy="16">实线箭头表示函数调用,虚线箭头表示数据返回或代币转移。</tspan>
+  </text>
+</svg>
