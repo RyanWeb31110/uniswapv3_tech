@@ -247,17 +247,85 @@ forge test --gas-report
 
 ### 部署到本地网络
 
-#### 方式一：使用一键部署脚本（推荐）
+#### 完整启动流程（推荐）
+
+**步骤 1：启动本地区块链节点**
+
+在第一个终端窗口中启动 Anvil：
 
 ```bash
-# 1. 在一个终端启动 Anvil 本地节点
 anvil --code-size-limit 50000
+```
 
-# 2. 在另一个终端运行部署脚本（包含 Quoter 合约）
+> 💡 `--code-size-limit 50000` 参数用于放宽合约大小限制，避免部署失败
+
+**步骤 2：部署智能合约**
+
+在第二个终端窗口中运行一键部署脚本：
+
+```bash
 ./scripts/deploy-with-quoter.sh
 ```
 
-#### 方式二：手动部署
+该脚本会自动完成以下操作：
+- ✅ 部署 WETH 和 USDC 代币合约
+- ✅ 部署 UniswapV3Factory、Pool、Manager 和 Quoter 合约
+- ✅ 初始化池子并添加初始流动性
+- ✅ 自动更新前端配置文件 `ui/src/config/contracts.js`
+- ✅ 生成部署报告到 `broadcast/` 目录
+
+**步骤 3：配置 MetaMask**
+
+在 MetaMask 中添加本地网络：
+
+```
+网络名称：Anvil Local
+RPC URL：http://127.0.0.1:8545
+链 ID：31337
+货币符号：ETH
+```
+
+导入测试账户（Anvil 默认账户）：
+
+```
+私钥：0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+地址：0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+```
+
+**步骤 4：启动前端应用**
+
+在第三个终端窗口中：
+
+```bash
+# 进入前端目录
+cd ui
+
+# 安装依赖（首次运行）
+npm install
+
+# 启动开发服务器
+npm start
+```
+
+前端将在 `http://localhost:3000` 启动，浏览器会自动打开。
+
+**步骤 5：开始使用**
+
+1. 点击"连接钱包"按钮，连接 MetaMask
+2. 确认网络已切换到 Anvil Local
+3. 使用以下功能：
+   - **添加流动性**：向池子提供 WETH/USDC 流动性
+   - **添加流动性（自定义价格区间）**：自定义价格区间和滑点保护
+   - **代币交换**：基础交换功能
+   - **增强版交换**：双向交换和实时报价
+   - **交换代币（带滑点保护）**：支持滑点容忍度设置的高级交换
+   - **事件监听**：实时查看 Mint 和 Swap 事件
+
+---
+
+#### 方式二：手动部署（高级用户）
+
+如果需要更精细的控制，可以手动执行部署步骤：
 
 ```bash
 # 1. 启动 Anvil
@@ -267,31 +335,46 @@ anvil --code-size-limit 50000
 export PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 export RPC_URL=http://localhost:8545
 
-# 3. 执行部署
+# 3. 执行部署脚本
 forge script scripts/DeployDevelopment.s.sol \
   --broadcast \
-  --fork-url $RPC_URL \
+  --rpc-url $RPC_URL \
   --private-key $PRIVATE_KEY \
   --code-size-limit 50000 \
   -vv
 ```
 
-**部署完成后：**
+**手动更新前端配置：**
 
-从输出中复制合约地址并保存为环境变量：
+从部署输出中复制合约地址，更新 `ui/src/config/contracts.js`：
+
+```javascript
+export const CONTRACTS = {
+  WETH: '<WETH地址>',
+  USDC: '<USDC地址>',
+  Pool: '<Pool地址>',
+  Manager: '<Manager地址>',
+  Quoter: '<Quoter地址>',
+};
+```
+
+> 💡 注意：本项目不需要 Factory 合约，因为只有一个预先部署的池子（WETH/USDC）
+
+---
+
+#### 验证部署
+
+**方式 1：使用 cast 命令行工具**
 
 ```bash
+# 保存合约地址为环境变量
 export WETH=<WETH地址>
 export USDC=<USDC地址>
 export POOL=<Pool地址>
 export MANAGER=<Manager地址>
 export USER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-```
 
-**验证部署：**
-
-```bash
-# 查询代币余额（注意：cast call 不支持 --ether，需要用管道）
+# 查询代币余额
 cast call $WETH "balanceOf(address)" $USER | cast --from-wei  # 应该显示 1.0
 cast call $USDC "balanceOf(address)" $USER | cast --from-wei  # 应该显示 5042.0
 
@@ -299,7 +382,48 @@ cast call $USDC "balanceOf(address)" $USER | cast --from-wei  # 应该显示 504
 cast call $POOL "slot0()" | xargs cast --abi-decode "a()(uint160,int24)"
 ```
 
-详细部署文档：[DEPLOYMENT.md](DEPLOYMENT.md) 和 [09-合约部署与本地测试.md](docs/1FirstSwap/09-合约部署与本地测试.md)
+**方式 2：使用前端界面**
+
+打开 `http://localhost:3000`，如果能看到以下信息则部署成功：
+- ✅ 钱包连接状态显示"已连接"
+- ✅ 网络显示为"Anvil Local"
+- ✅ 可以正常执行添加流动性和交换操作
+- ✅ 右侧事件订阅显示实时事件
+
+---
+
+#### 常见问题
+
+**Q: 前端显示"Quoter 合约未部署"？**
+
+A: 确保使用 `./scripts/deploy-with-quoter.sh` 脚本部署，该脚本会自动部署 Quoter 合约。
+
+**Q: MetaMask 交易失败？**
+
+A: 检查以下几点：
+1. 确认已连接到 Anvil Local 网络（链 ID 31337）
+2. 确认使用的是正确的测试账户
+3. 尝试重置 MetaMask 账户（设置 → 高级 → 重置账户）
+
+**Q: 重启 Anvil 后前端无法使用？**
+
+A: Anvil 重启后所有状态会丢失，需要重新部署合约：
+1. 停止 Anvil（Ctrl+C）
+2. 重新启动 Anvil
+3. 重新运行部署脚本
+4. 刷新前端页面
+
+**Q: 如何查看详细的交易日志？**
+
+A: 打开浏览器开发者工具（F12），切换到 Console 标签页，所有交易操作都有详细的日志输出。
+
+---
+
+**📖 详细文档：**
+- [DEPLOYMENT.md](DEPLOYMENT.md) - 完整部署指南
+- [09-合约部署与本地测试.md](docs/1FirstSwap/09-合约部署与本地测试.md) - 技术细节
+- [ui/README.md](ui/README.md) - 前端使用说明
+- [ui/QUICKSTART.md](ui/QUICKSTART.md) - 前端快速入门
 
 ### 代码格式化
 

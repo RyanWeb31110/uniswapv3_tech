@@ -1,0 +1,323 @@
+/**
+ * 带滑点保护的交换组件样式
+ */
+
+.swap-with-slippage {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin-bottom: 24px;
+}
+
+.swap-with-slippage h2 {
+  margin: 0 0 24px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.swap-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 输入组 */
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.input-group label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.amount-input {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: white;
+  transition: all 0.2s;
+}
+
+.amount-input:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.amount-input input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 16px;
+  color: #111827;
+  background: transparent;
+}
+
+.amount-input input::placeholder {
+  color: #9ca3af;
+}
+
+.amount-input input:disabled {
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+.amount-input input.output-amount {
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+.token-symbol {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+  background: #f3f4f6;
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+
+/* 方向切换按钮 */
+.swap-direction {
+  display: flex;
+  justify-content: center;
+  margin: -8px 0;
+}
+
+.toggle-btn {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #d1d5db;
+  border-radius: 50%;
+  background: white;
+  color: #374151;
+  font-size: 24px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toggle-btn:hover:not(:disabled) {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #3b82f6;
+  transform: rotate(180deg);
+}
+
+.toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 滑点设置组 */
+.settings-group {
+  margin-top: 8px;
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.settings-group label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.slippage-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.slippage-buttons button {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: white;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.slippage-buttons button:hover:not(:disabled) {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #3b82f6;
+}
+
+.slippage-buttons button.active {
+  background: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
+
+.slippage-buttons button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.custom-slippage {
+  flex: 1.5;
+  padding: 8px 12px !important;
+  text-align: center;
+  font-size: 14px !important;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+}
+
+.custom-slippage:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+/* 价格信息 */
+.price-info {
+  padding: 16px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: #1e40af;
+}
+
+.info-row:last-child {
+  margin-bottom: 0;
+}
+
+.info-row.small {
+  font-size: 12px;
+  color: #3b82f6;
+}
+
+.info-row span:first-child {
+  color: #374151;
+}
+
+.info-row span:last-child {
+  font-weight: 500;
+}
+
+/* 状态消息 */
+.status-message,
+.error-message {
+  padding: 12px 16px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.status-message {
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  color: #92400e;
+}
+
+.status-message p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.error-message {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.error-message p {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* 交换按钮 */
+.swap-button {
+  width: 100%;
+  padding: 16px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.swap-button:hover:not(:disabled) {
+  background: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.swap-button:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* 警告文本 */
+.warning-text {
+  text-align: center;
+  color: #d97706;
+  font-size: 14px;
+  margin: 12px 0 0 0;
+  padding: 12px;
+  background: #fef3c7;
+  border-radius: 8px;
+}
+
+/* 响应式设计 */
+@media (max-width: 640px) {
+  .swap-with-slippage {
+    padding: 16px;
+  }
+
+  .swap-with-slippage h2 {
+    font-size: 18px;
+  }
+
+  .amount-input {
+    padding: 10px 12px;
+  }
+
+  .amount-input input {
+    font-size: 14px;
+  }
+
+  .token-symbol {
+    font-size: 14px;
+    padding: 4px 8px;
+  }
+
+  .slippage-buttons {
+    flex-wrap: wrap;
+  }
+
+  .slippage-buttons button,
+  .custom-slippage {
+    flex: 1 1 45%;
+  }
+
+  .swap-button {
+    padding: 14px;
+    font-size: 16px;
+  }
+}
