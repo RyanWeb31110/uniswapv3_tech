@@ -5,11 +5,23 @@ import "./UniswapV3Pool.sol";
 import "./interfaces/IERC20.sol";
 import "./lib/TickMath.sol";
 import "./lib/LiquidityAmounts.sol";
+import "./lib/PoolAddress.sol";
 
 /// @title Uniswap V3 管理合约
 /// @notice 为核心池合约提供用户友好的接口
 /// @dev 作为用户和池合约之间的中介，处理代币授权和转移
 contract UniswapV3Manager {
+    // ==================== 状态变量 ====================
+
+    /// @notice Factory 合约地址
+    address public immutable factory;
+
+    // ==================== 构造函数 ====================
+
+    constructor(address factory_) {
+        factory = factory_;
+    }
+
     // ==================== 数据结构 ====================
 
     /// @notice 添加流动性的参数
@@ -108,7 +120,57 @@ contract UniswapV3Manager {
         );
     }
 
-    /// @notice 在指定池中执行代币交换
+    /// @notice 在指定池中执行代币交换（新版本，自动查找池子）
+    /// @dev 用户需要先 approve 足够的输入代币给本合约
+    /// @param tokenIn 输入代币地址
+    /// @param tokenOut 输出代币地址
+    /// @param tickSpacing Tick 间距
+    /// @param amountIn 输入金额
+    /// @param sqrtPriceLimitX96 价格限制（Q64.96 格式的平方根价格）
+    /// @return amountOut 输出代币数量
+    function swapSingle(
+        address tokenIn,
+        address tokenOut,
+        uint24 tickSpacing,
+        uint256 amountIn,
+        uint160 sqrtPriceLimitX96
+    ) public returns (uint256 amountOut) {
+        // 1. 排序代币
+        (address token0, address token1) = tokenIn < tokenOut
+            ? (tokenIn, tokenOut)
+            : (tokenOut, tokenIn);
+
+        // 2. 计算池子地址
+        address poolAddress = PoolAddress.computeAddress(
+            factory,
+            token0,
+            token1,
+            tickSpacing
+        );
+
+        // 3. 确定交换方向
+        bool zeroForOne = tokenIn < tokenOut;
+
+        // 4. 执行交换
+        (int256 amount0, int256 amount1) = UniswapV3Pool(poolAddress).swap(
+            msg.sender,
+            zeroForOne,
+            amountIn,
+            sqrtPriceLimitX96,
+            abi.encode(
+                UniswapV3Pool.CallbackData({
+                    token0: token0,
+                    token1: token1,
+                    payer: msg.sender
+                })
+            )
+        );
+
+        // 5. 返回输出数量
+        amountOut = uint256(-(zeroForOne ? amount1 : amount0));
+    }
+
+    /// @notice 在指定池中执行代币交换（旧版本，保持向后兼容）
     /// @dev 用户需要先 approve 足够的输入代币给本合约
     /// @param poolAddress_ 目标池合约地址
     /// @param zeroForOne 交换方向标志

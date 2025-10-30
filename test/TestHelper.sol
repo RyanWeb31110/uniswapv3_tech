@@ -4,6 +4,8 @@ pragma solidity ^0.8.14;
 import {ABDKMath64x64} from "abdk-libraries-solidity/ABDKMath64x64.sol";
 import {TickMath} from "../src/lib/TickMath.sol";
 import {FixedPoint96} from "../src/lib/FixedPoint96.sol";
+import {UniswapV3Factory} from "../src/UniswapV3Factory.sol";
+import {UniswapV3Pool} from "../src/UniswapV3Pool.sol";
 
 /// @title 测试辅助函数库
 /// @notice 提供价格和 Tick 之间的转换工具
@@ -126,5 +128,27 @@ library TestHelper {
     /// @return 对应的 Q64.64 格式值
     function q96ToQ64(uint256 valueQ96) internal pure returns (uint256) {
         return valueQ96 >> (96 - 64); // 右移 32 位
+    }
+
+    /// @notice 创建并初始化一个新的池子
+    /// @param factory Factory 合约地址
+    /// @param token0 代币0地址（必须 < token1）
+    /// @param token1 代币1地址
+    /// @param tickSpacing Tick 间距
+    /// @param sqrtPriceX96 初始价格
+    /// @return pool 创建的池子合约
+    function createAndInitializePool(
+        UniswapV3Factory factory,
+        address token0,
+        address token1,
+        uint24 tickSpacing,
+        uint160 sqrtPriceX96
+    ) internal returns (UniswapV3Pool pool) {
+        // 创建池子
+        address poolAddress = factory.createPool(token0, token1, tickSpacing);
+        pool = UniswapV3Pool(poolAddress);
+
+        // 初始化池子
+        pool.initialize(sqrtPriceX96);
     }
 }

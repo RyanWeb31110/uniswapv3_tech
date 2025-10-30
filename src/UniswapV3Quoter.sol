@@ -3,11 +3,23 @@ pragma solidity ^0.8.14;
 
 import "./interfaces/IUniswapV3Pool.sol";
 import "./interfaces/IUniswapV3SwapCallback.sol";
+import "./lib/PoolAddress.sol";
 
 /// @title UniswapV3Quoter
 /// @notice 链上价格查询合约，用于计算交换结果而不实际执行交换
 /// @dev 通过模拟真实交换来获取精确的报价信息
 contract UniswapV3Quoter is IUniswapV3SwapCallback {
+    // ============ 状态变量 ============
+
+    /// @notice Factory 合约地址
+    address public immutable factory;
+
+    // ============ 构造函数 ============
+
+    constructor(address factory_) {
+        factory = factory_;
+    }
+
     // ============ 错误定义 ============
     
     /// @notice 无效的池地址
@@ -26,8 +38,53 @@ contract UniswapV3Quoter is IUniswapV3SwapCallback {
     }
 
     // ============ 外部函数 ============
-    
-    /// @notice 获取交换报价
+
+    /// @notice 获取交换报价（新版本，自动查找池子）
+    /// @param tokenIn 输入代币地址
+    /// @param tokenOut 输出代币地址
+    /// @param tickSpacing Tick 间距
+    /// @param amountIn 输入金额
+    /// @return amountOut 输出金额
+    /// @return sqrtPriceX96After 交换后的价格（Q64.96 格式）
+    /// @return tickAfter 交换后的 Tick
+    function quoteSingle(
+        address tokenIn,
+        address tokenOut,
+        uint24 tickSpacing,
+        uint256 amountIn
+    )
+        public
+        returns (
+            uint256 amountOut,
+            uint160 sqrtPriceX96After,
+            int24 tickAfter
+        )
+    {
+        // 1. 排序代币
+        (address token0, address token1) = tokenIn < tokenOut
+            ? (tokenIn, tokenOut)
+            : (tokenOut, tokenIn);
+
+        // 2. 计算池子地址
+        address poolAddress = PoolAddress.computeAddress(
+            factory,
+            token0,
+            token1,
+            tickSpacing
+        );
+
+        // 3. 确定交换方向
+        bool zeroForOne = tokenIn < tokenOut;
+
+        // 4. 调用旧版本的 quote 函数
+        return quote(QuoteParams({
+            pool: poolAddress,
+            amountIn: amountIn,
+            zeroForOne: zeroForOne
+        }));
+    }
+
+    /// @notice 获取交换报价（旧版本，保持向后兼容）
     /// @dev 通过模拟真实交换来获取精确的报价信息
     /// @param params 报价参数
     /// @return amountOut 输出金额

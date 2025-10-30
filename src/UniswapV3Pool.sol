@@ -12,6 +12,7 @@ import "./interfaces/IERC20.sol";
 import "./interfaces/IUniswapV3MintCallback.sol";
 import "./interfaces/IUniswapV3SwapCallback.sol";
 import "./interfaces/IUniswapV3FlashCallback.sol";
+import "./interfaces/IUniswapV3PoolDeployer.sol";
 
 /// @title UniswapV3Pool
 /// @notice 实现 Uniswap V3 的核心交易池逻辑
@@ -67,10 +68,14 @@ contract UniswapV3Pool {
 
     // ============ 不可变状态 ============
 
+    /// @notice Factory 合约地址
+    address public immutable factory;
     /// @notice 池子的第一个代币
     address public immutable token0;
     /// @notice 池子的第二个代币
     address public immutable token1;
+    /// @notice Tick 间距（决定价格精度）
+    uint24 public immutable tickSpacing;
 
     // ============ 可变状态 ============
 
@@ -101,6 +106,8 @@ contract UniswapV3Pool {
     error ZeroLiquidity();
     error InsufficientInputAmount();
     error InvalidPriceLimit();
+    error AlreadyInitialized();
+    error TickSpacingMismatch();
 
     // ============ 事件定义 ============
 
@@ -141,18 +148,29 @@ contract UniswapV3Pool {
     // ============ 构造函数 ============
 
     /// @notice 创建新的交易池
-    /// @param token0_ 第一个代币地址
-    /// @param token1_ 第二个代币地址
-    /// @param sqrtPriceX96 初始平方根价格
-    /// @param tick 初始 Tick
-    constructor(address token0_, address token1_, uint160 sqrtPriceX96, int24 tick) {
-        token0 = token0_;
-        token1 = token1_;
-
-        slot0 = Slot0({ sqrtPriceX96: sqrtPriceX96, tick: tick });
+    /// @dev 使用控制反转模式，从 Factory 合约读取参数
+    constructor() {
+        // msg.sender 就是 Factory 合约地址
+        (factory, token0, token1, tickSpacing) = IUniswapV3PoolDeployer(
+            msg.sender
+        ).parameters();
     }
 
     // ============ 外部函数 ============
+
+    /// @notice 初始化池子价格
+    /// @param sqrtPriceX96 初始价格的 Q64.96 格式平方根
+    /// @dev 该函数只能调用一次
+    function initialize(uint160 sqrtPriceX96) public {
+        // 防止重复初始化
+        if (slot0.sqrtPriceX96 != 0) revert AlreadyInitialized();
+
+        // 根据价格计算对应的 tick
+        int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
+
+        // 设置初始状态
+        slot0 = Slot0({sqrtPriceX96: sqrtPriceX96, tick: tick});
+    }
 
     /// @notice 在指定价格区间添加流动性
     /// @dev 支持三种价格区间类型：上方、包含当前价格、下方
@@ -174,6 +192,11 @@ contract UniswapV3Pool {
         // 步骤 1: 验证参数
         if (lowerTick >= upperTick || lowerTick < MIN_TICK || upperTick > MAX_TICK) {
             revert InvalidTickRange();
+        }
+
+        // 验证 tick 必须是 tickSpacing 的倍数
+        if (lowerTick % int24(tickSpacing) != 0 || upperTick % int24(tickSpacing) != 0) {
+            revert TickSpacingMismatch();
         }
 
         if (amount == 0) revert ZeroLiquidity();
@@ -342,7 +365,7 @@ contract UniswapV3Pool {
             // 获取下一个初始化的tick和是否已初始化的标志
             (step.nextTick, step.initialized) = tickBitmap.nextInitializedTickWithinOneWord(
                 state.tick,
-                1,        // tickSpacing = 1
+                int24(tickSpacing),
                 zeroForOne
             );
 

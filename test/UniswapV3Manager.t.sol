@@ -4,14 +4,19 @@ pragma solidity ^0.8.14;
 import "forge-std/Test.sol";
 import "../src/UniswapV3Manager.sol";
 import "../src/UniswapV3Pool.sol";
+import "../src/UniswapV3Factory.sol";
 import "../src/lib/TickMath.sol";
 import "./ERC20Mintable.sol";
+import "./TestHelper.sol";
 
 /// @title UniswapV3Manager 测试合约
 /// @notice 测试 Manager 合约作为用户和池之间的中介
 contract UniswapV3ManagerTest is Test {
+    using TestHelper for *;
+
     // ============ 测试状态变量 ============
 
+    UniswapV3Factory factory;
     ERC20Mintable token0;
     ERC20Mintable token1;
     UniswapV3Pool pool;
@@ -50,16 +55,25 @@ contract UniswapV3ManagerTest is Test {
         token0 = new ERC20Mintable("Ether", "ETH", 18);
         token1 = new ERC20Mintable("USDC", "USDC", 18);
 
-        // 2. 部署池合约
-        pool = new UniswapV3Pool(
+        // 确保 token0 < token1
+        if (address(token0) > address(token1)) {
+            (token0, token1) = (token1, token0);
+        }
+
+        // 2. 部署 Factory
+        factory = new UniswapV3Factory();
+
+        // 3. 创建并初始化池子
+        pool = TestHelper.createAndInitializePool(
+            factory,
             address(token0),
             address(token1),
-            5602277097478614198912276234240, // sqrtPriceX96 = √5000
-            85176 // tick for price = 5000
+            60, // tickSpacing
+            TestHelper.sqrtP(5000) // sqrtPriceX96 = √5000
         );
 
-        // 3. 部署 Manager 合约
-        manager = new UniswapV3Manager();
+        // 4. 部署 Manager 合约
+        manager = new UniswapV3Manager(address(factory));
     }
 
     // ============ 测试用例：Mint 功能 ============
