@@ -4,11 +4,15 @@ pragma solidity ^0.8.14;
 import "./interfaces/IUniswapV3Pool.sol";
 import "./interfaces/IUniswapV3SwapCallback.sol";
 import "./lib/PoolAddress.sol";
+import "./lib/Path.sol";
+import "./lib/TickMath.sol";
 
 /// @title UniswapV3Quoter
 /// @notice 链上价格查询合约，用于计算交换结果而不实际执行交换
 /// @dev 通过模拟真实交换来获取精确的报价信息
 contract UniswapV3Quoter is IUniswapV3SwapCallback {
+    using Path for bytes;
+
     // ============ 状态变量 ============
 
     /// @notice Factory 合约地址
@@ -21,76 +25,39 @@ contract UniswapV3Quoter is IUniswapV3SwapCallback {
     }
 
     // ============ 错误定义 ============
-    
+
     /// @notice 无效的池地址
     error InvalidPool();
-    
+
     /// @notice 无效的输入金额
     error InvalidAmountIn();
 
     // ============ 数据结构 ============
-    
-    /// @notice 报价参数结构
+
+    /// @notice 报价参数结构（旧版本）
     struct QuoteParams {
         address pool;        // 目标池合约地址
         uint256 amountIn;    // 输入金额
         bool zeroForOne;     // 交换方向（true: token0 -> token1）
     }
 
-    // ============ 外部函数 ============
-
-    /// @notice 获取交换报价（新版本，自动查找池子）
-    /// @param tokenIn 输入代币地址
-    /// @param tokenOut 输出代币地址
-    /// @param tickSpacing Tick 间距
-    /// @param amountIn 输入金额
-    /// @return amountOut 输出金额
-    /// @return sqrtPriceX96After 交换后的价格（Q64.96 格式）
-    /// @return tickAfter 交换后的 Tick
-    function quoteSingle(
-        address tokenIn,
-        address tokenOut,
-        uint24 tickSpacing,
-        uint256 amountIn
-    )
-        public
-        returns (
-            uint256 amountOut,
-            uint160 sqrtPriceX96After,
-            int24 tickAfter
-        )
-    {
-        // 1. 排序代币
-        (address token0, address token1) = tokenIn < tokenOut
-            ? (tokenIn, tokenOut)
-            : (tokenOut, tokenIn);
-
-        // 2. 计算池子地址
-        address poolAddress = PoolAddress.computeAddress(
-            factory,
-            token0,
-            token1,
-            tickSpacing
-        );
-
-        // 3. 确定交换方向
-        bool zeroForOne = tokenIn < tokenOut;
-
-        // 4. 调用旧版本的 quote 函数
-        return quote(QuoteParams({
-            pool: poolAddress,
-            amountIn: amountIn,
-            zeroForOne: zeroForOne
-        }));
+    /// @notice 单池报价参数
+    struct QuoteSingleParams {
+        address tokenIn;           // 输入代币
+        address tokenOut;          // 输出代币
+        uint24 tickSpacing;        // Tick 间距
+        uint256 amountIn;          // 输入数量
+        uint160 sqrtPriceLimitX96; // 价格限制
     }
 
-    /// @notice 获取交换报价（旧版本，保持向后兼容）
-    /// @dev 通过模拟真实交换来获取精确的报价信息
-    /// @param params 报价参数
-    /// @return amountOut 输出金额
-    /// @return sqrtPriceX96After 交换后的价格（Q64.96 格式）
-    /// @return tickAfter 交换后的 Tick
-    function quote(QuoteParams memory params)
+    // ============ 外部函数 ============
+
+    /// @notice 计算单池交换的输出
+    /// @param params 单池报价参数
+    /// @return amountOut 预期输出数量
+    /// @return sqrtPriceX96After 交换后的价格
+    /// @return tickAfter 交换后的 tick
+    function quoteSingle(QuoteSingleParams memory params)
         public
         returns (
             uint256 amountOut,
@@ -98,26 +65,115 @@ contract UniswapV3Quoter is IUniswapV3SwapCallback {
             int24 tickAfter
         )
     {
-        // 参数验证
-        if (params.pool == address(0)) revert InvalidPool();
-        if (params.amountIn == 0) revert InvalidAmountIn();
+        // 获取池合约
+        IUniswapV3Pool pool = getPool(
+            params.tokenIn,
+            params.tokenOut,
+            params.tickSpacing
+        );
 
-        // 调用池合约的 swap 函数进行模拟交换
-        // 这个调用会触发 uniswapV3SwapCallback，在那里我们会 revert 并返回结果
+        // 确定交换方向
+        bool zeroForOne = params.tokenIn < params.tokenOut;
+
+        // 尝试执行交换（会回滚，但我们会捕获返回值）
         try
-            IUniswapV3Pool(params.pool).swap(
-                address(this),           // 接收者（本合约）
-                params.zeroForOne,       // 交换方向
-                params.amountIn,         // 输入金额
-                abi.encode(params.pool)  // 额外数据（池地址）
+            pool.swap(
+                address(this),
+                zeroForOne,
+                params.amountIn,
+                params.sqrtPriceLimitX96 == 0
+                    ? (
+                        zeroForOne
+                            ? TickMath.MIN_SQRT_RATIO + 1  // 最小价格限制 + 1
+                            : TickMath.MAX_SQRT_RATIO - 1   // 最大价格限制 - 1
+                    )
+                    : params.sqrtPriceLimitX96,
+                abi.encode(address(pool))
             )
         {} catch (bytes memory reason) {
-            // 解码 revert 原因，获取交换结果
+            // 从回滚数据中提取结果
             return abi.decode(reason, (uint256, uint160, int24));
         }
-        
-        // 如果执行到这里，说明没有发生 revert，这是不应该发生的
-        revert("Unexpected: swap did not revert");
+    }
+
+    /// @notice 计算多池交换的输出
+    /// @param path 交换路径
+    /// @param amountIn 输入数量
+    /// @return amountOut 最终输出数量
+    /// @return sqrtPriceX96AfterList 每个池交换后的价格列表
+    /// @return tickAfterList 每个池交换后的 tick 列表
+    function quote(bytes memory path, uint256 amountIn)
+        public
+        returns (
+            uint256 amountOut,
+            uint160[] memory sqrtPriceX96AfterList,
+            int24[] memory tickAfterList
+        )
+    {
+        // 初始化结果数组（长度等于池的数量）
+        sqrtPriceX96AfterList = new uint160[](path.numPools());
+        tickAfterList = new int24[](path.numPools());
+
+        uint256 i = 0;
+
+        // 遍历路径中的每个池
+        while (true) {
+            // 解码当前池的参数
+            (address tokenIn, address tokenOut, uint24 tickSpacing) = path
+                .decodeFirstPool();
+
+            // 调用单池报价
+            (
+                uint256 amountOut_,
+                uint160 sqrtPriceX96After,
+                int24 tickAfter
+            ) = quoteSingle(
+                    QuoteSingleParams({
+                        tokenIn: tokenIn,
+                        tokenOut: tokenOut,
+                        tickSpacing: tickSpacing,
+                        amountIn: amountIn,      // 当前输入数量
+                        sqrtPriceLimitX96: 0     // 不设置价格限制
+                    })
+                );
+
+            // 保存当前池的结果
+            sqrtPriceX96AfterList[i] = sqrtPriceX96After;
+            tickAfterList[i] = tickAfter;
+            amountIn = amountOut_; // 当前池的输出是下一个池的输入
+            i++;
+
+            // 检查是否还有更多池
+            if (path.hasMultiplePools()) {
+                path = path.skipToken(); // 移除已处理的池
+            } else {
+                amountOut = amountIn;    // 最后一个池的输出就是最终输出
+                break;
+            }
+        }
+    }
+
+    // ============ 内部函数 ============
+
+    /// @notice 获取池合约地址
+    /// @param token0 第一个代币地址
+    /// @param token1 第二个代币地址
+    /// @param tickSpacing Tick 间距
+    /// @return pool 池合约实例
+    function getPool(
+        address token0,
+        address token1,
+        uint24 tickSpacing
+    ) internal view returns (IUniswapV3Pool pool) {
+        // 确保 token0 < token1（符合 UniswapV3 的地址排序规则）
+        (token0, token1) = token0 < token1
+            ? (token0, token1)
+            : (token1, token0);
+
+        // 使用 CREATE2 计算池地址（无需查询 Factory）
+        pool = IUniswapV3Pool(
+            PoolAddress.computeAddress(factory, token0, token1, tickSpacing)
+        );
     }
 
     // ============ 回调函数 ============

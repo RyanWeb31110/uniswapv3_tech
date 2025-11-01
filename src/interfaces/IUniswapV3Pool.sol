@@ -24,6 +24,7 @@ interface IUniswapV3Pool {
     /// @param recipient 接收输出代币的地址
     /// @param zeroForOne 交换方向（true: token0 -> token1）
     /// @param amountSpecified 指定的输入金额
+    /// @param sqrtPriceLimitX96 价格限制（Q64.96 格式的平方根价格）
     /// @param data 传递给回调函数的额外数据
     /// @return amount0 token0 的变化量
     /// @return amount1 token1 的变化量
@@ -31,6 +32,7 @@ interface IUniswapV3Pool {
         address recipient,
         bool zeroForOne,
         uint256 amountSpecified,
+        uint160 sqrtPriceLimitX96,
         bytes calldata data
     ) external returns (int256 amount0, int256 amount1);
 
