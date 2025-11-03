@@ -130,6 +130,78 @@ library TestHelper {
         return valueQ96 >> (96 - 64); // 右移 32 位
     }
 
+    /// @notice 舍入除法 (Q64.64 格式)
+    /// @dev 对两个 Q64.64 定点数进行除法，并舍入到最近的整数
+    /// @param x 被除数 (Q64.64 格式)
+    /// @param y 除数 (Q64.64 格式)
+    /// @return result 舍入后的整数结果 (Q64.64 格式，但小数部分为 0)
+    function divRound(int128 x, int128 y)
+        internal
+        pure
+        returns (int128 result)
+    {
+        // 1. 执行 Q64.64 除法
+        int128 quot = ABDKMath64x64.div(x, y);
+
+        // 2. 提取整数部分 (右移 64 位，丢弃小数部分)
+        result = quot >> 64;
+
+        // 3. 检查小数部分是否 >= 0.5
+        // quot % 2^64 取出小数部分
+        // 0x8000000000000000 表示 0.5
+        if (quot % 2**64 >= 0x8000000000000000) {
+            result += 1;  // 小数部分 >= 0.5，向上舍入
+        }
+    }
+
+    /// @notice 将任意 tick 舍入到最近的可用 tick
+    /// @dev 确保 tick 是 tickSpacing 的倍数，并在有效范围内
+    /// @param tick_ 目标 tick
+    /// @param tickSpacing 池子的 tick spacing
+    /// @return result 舍入后的可用 tick
+    function nearestUsableTick(int24 tick_, uint24 tickSpacing)
+        internal
+        pure
+        returns (int24 result)
+    {
+        // 1. 使用 divRound 进行舍入
+        result =
+            int24(divRound(int128(tick_), int128(int24(tickSpacing)))) *
+            int24(tickSpacing);
+
+        // 2. 边界检查和调整
+        if (result < TickMath.MIN_TICK) {
+            // 超出下界，向上调整一个 spacing
+            result += int24(tickSpacing);
+        } else if (result > TickMath.MAX_TICK) {
+            // 超出上界，向下调整一个 spacing
+            result -= int24(tickSpacing);
+        }
+    }
+
+    /// @notice 从价格计算舍入后的 sqrtPriceX96
+    /// @dev 先计算价格对应的 tick，舍入后再转换回 sqrtPriceX96
+    /// @param price 价格
+    /// @param tickSpacing tick spacing
+    /// @return 舍入后的价格平方根
+    function sqrtPRounded(uint256 price, uint24 tickSpacing)
+        internal
+        pure
+        returns (uint160)
+    {
+        // 1. 从价格计算 sqrtPriceX96
+        uint160 sqrtPrice = sqrtP(price);
+
+        // 2. 从 sqrtPriceX96 计算 tick
+        int24 tickValue = TickMath.getTickAtSqrtRatio(sqrtPrice);
+
+        // 3. 舍入 tick
+        int24 roundedTick = nearestUsableTick(tickValue, tickSpacing);
+
+        // 4. 从舍入后的 tick 计算 sqrtPriceX96
+        return TickMath.getSqrtRatioAtTick(roundedTick);
+    }
+
     /// @notice 创建并初始化一个新的池子
     /// @param factory Factory 合约地址
     /// @param token0 代币0地址（必须 < token1）
