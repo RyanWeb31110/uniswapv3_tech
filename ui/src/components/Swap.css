@@ -116,3 +116,60 @@
   margin-top: 12px;
 }
 
+/* 自动路由相关样式 */
+.btn-switch {
+  background: white;
+  border: 2px solid #0984e3;
+  color: #0984e3;
+  padding: 8px 16px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 20px;
+  transition: all 0.2s;
+}
+
+.btn-switch:hover:not(:disabled) {
+  background: #0984e3;
+  color: white;
+  transform: rotate(180deg);
+}
+
+.btn-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.path-preview {
+  background: #e3f2fd;
+  border-left: 4px solid #2196f3;
+  padding: 16px;
+  margin: 16px 0;
+  border-radius: 4px;
+}
+
+.path-preview.error {
+  background: #ffebee;
+  border-left-color: #f44336;
+}
+
+.path-preview h4 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  color: #1976d2;
+}
+
+.path-preview.error h4 {
+  color: #c62828;
+}
+
+.path-info p {
+  margin: 8px 0;
+  font-size: 14px;
+  color: #424242;
+}
+
+.path-info strong {
+  font-weight: 600;
+  color: #1976d2;
+}
+

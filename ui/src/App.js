@@ -16,6 +16,7 @@ import AddLiquidityDialog from './components/AddLiquidityDialog';
 import Swap from './components/Swap';
 import EnhancedSwap from './components/EnhancedSwap';
 import SwapWithSlippage from './components/SwapWithSlippage';
+import SwapWithAutoRouter from './components/SwapWithAutoRouter';
 import EventFeed from './components/EventFeed';
 import './App.css';
 
@@ -86,6 +87,9 @@ function App() {
 
                 {/* 新增：带滑点保护的交换组件 */}
                 <SwapWithSlippage onSuccess={handleTransactionSuccess} />
+
+                {/* 新增：带自动路由的交换组件 */}
+                <SwapWithAutoRouter onSuccess={handleTransactionSuccess} />
               </div>
 
               {/* 右侧：事件列表 */}
