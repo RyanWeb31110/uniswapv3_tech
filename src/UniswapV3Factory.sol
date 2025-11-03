@@ -23,9 +23,9 @@ contract UniswapV3Factory is IUniswapV3PoolDeployer {
 
     // ============ 状态变量 ============
 
-    /// @notice 记录哪些 tick spacing 是被支持的
-    /// @dev 使用 mapping 便于未来扩展
-    mapping(uint24 => bool) public tickSpacings;
+    /// @notice 记录哪些 tick spacing 和对应的手续费率是被支持的
+    /// @dev tickSpacing => fee => 是否支持
+    mapping(uint24 => mapping(uint24 => bool)) public tickSpacingToFee;
 
     /// @notice 临时存储池子初始化参数（仅在部署期间使用）
     /// @dev 使用控制反转模式，避免在构造函数中传递大量参数
@@ -53,10 +53,13 @@ contract UniswapV3Factory is IUniswapV3PoolDeployer {
     // ============ 构造函数 ============
 
     constructor() {
-        // 初始化支持的 tick spacing
-        tickSpacings[10] = true; // 稳定币对 - 高精度
-        tickSpacings[60] = true; // 常规代币对 - 中等精度
-        tickSpacings[200] = true; // 高波动率代币对 - 低精度
+        // 初始化支持的 tick spacing 和手续费率组合
+        // 稳定币对 - 高精度，低手续费（0.05%）
+        tickSpacingToFee[10][500] = true;
+        // 常规代币对 - 中等精度，中等手续费（0.3%）
+        tickSpacingToFee[60][3000] = true;
+        // 高波动率代币对 - 低精度，高手续费（1%）
+        tickSpacingToFee[200][10000] = true;
     }
 
     // ============ 外部函数 ============
@@ -65,19 +68,21 @@ contract UniswapV3Factory is IUniswapV3PoolDeployer {
     /// @param tokenX 代币 X 地址
     /// @param tokenY 代币 Y 地址
     /// @param tickSpacing Tick 间距（决定价格精度）
+    /// @param fee 手续费率（以百万分之一为单位）
     /// @return pool 新创建的池子地址
     function createPool(
         address tokenX,
         address tokenY,
-        uint24 tickSpacing
+        uint24 tickSpacing,
+        uint24 fee
     ) public returns (address pool) {
         // ========== 1. 输入验证 ==========
 
         // 检查代币地址不能相同
         if (tokenX == tokenY) revert TokensMustBeDifferent();
 
-        // 检查 tick spacing 是否被支持
-        if (!tickSpacings[tickSpacing]) revert UnsupportedTickSpacing();
+        // 检查 tick spacing 和 fee 的组合是否被支持
+        if (!tickSpacingToFee[tickSpacing][fee]) revert UnsupportedTickSpacing();
 
         // ========== 2. 代币排序 ==========
         // 确保 token0 < token1（地址数值比较）
@@ -99,7 +104,8 @@ contract UniswapV3Factory is IUniswapV3PoolDeployer {
             factory: address(this),
             token0: tokenX,
             token1: tokenY,
-            tickSpacing: tickSpacing
+            tickSpacing: tickSpacing,
+            fee: fee
         });
 
         // ========== 4. 使用 CREATE2 部署池子 ==========

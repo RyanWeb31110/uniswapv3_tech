@@ -56,7 +56,16 @@ contract UniswapV3Pool {
         uint160 sqrtPriceNextX96;  // 下一个 Tick 的价格
         uint256 amountIn;          // 当前步骤的输入金额
         uint256 amountOut;         // 当前步骤的输出金额
+        uint256 feeAmount;         // 当前步骤的手续费
         bool initialized;          // 下一个tick是否已初始化
+    }
+
+    /// @notice 修改仓位参数结构
+    struct ModifyPositionParams {
+        address owner;
+        int24 lowerTick;
+        int24 upperTick;
+        int128 liquidityDelta;
     }
 
     // ============ 常量 ============
@@ -76,6 +85,9 @@ contract UniswapV3Pool {
     address public immutable token1;
     /// @notice Tick 间距（决定价格精度）
     uint24 public immutable tickSpacing;
+    /// @notice 手续费率（以百万分之一为单位）
+    /// @dev 500 = 0.05%, 3000 = 0.3%, 10000 = 1%
+    uint24 public immutable fee;
 
     // ============ 可变状态 ============
 
@@ -90,6 +102,14 @@ contract UniswapV3Pool {
 
     /// @notice 当前价格点的流动性
     uint128 public liquidity;
+
+    /// @notice token0 的全局费用累积器
+    /// @dev 使用 Q128 定点数格式，记录每单位流动性累积的 token0 手续费
+    uint256 public feeGrowthGlobal0X128;
+
+    /// @notice token1 的全局费用累积器
+    /// @dev 使用 Q128 定点数格式，记录每单位流动性累积的 token1 手续费
+    uint256 public feeGrowthGlobal1X128;
 
     /// @notice Tick 状态映射
     mapping(int24 => Tick.Info) public ticks;
@@ -145,13 +165,33 @@ contract UniswapV3Pool {
         uint256 amount1
     );
 
+    /// @notice 移除流动性事件
+    event Burn(
+        address indexed owner,
+        int24 indexed lowerTick,
+        int24 indexed upperTick,
+        uint128 amount,
+        uint256 amount0,
+        uint256 amount1
+    );
+
+    /// @notice 提取代币事件
+    event Collect(
+        address indexed owner,
+        address recipient,
+        int24 indexed lowerTick,
+        int24 indexed upperTick,
+        uint256 amount0,
+        uint256 amount1
+    );
+
     // ============ 构造函数 ============
 
     /// @notice 创建新的交易池
     /// @dev 使用控制反转模式，从 Factory 合约读取参数
     constructor() {
         // msg.sender 就是 Factory 合约地址
-        (factory, token0, token1, tickSpacing) = IUniswapV3PoolDeployer(
+        (factory, token0, token1, tickSpacing, fee) = IUniswapV3PoolDeployer(
             msg.sender
         ).parameters();
     }
@@ -188,103 +228,30 @@ contract UniswapV3Pool {
         uint128 amount,
         bytes calldata data
     ) external returns (uint256 amount0, uint256 amount1) {
-        // ==================== C: CHECK（检查）====================
-        // 步骤 1: 验证参数
-        if (lowerTick >= upperTick || lowerTick < MIN_TICK || upperTick > MAX_TICK) {
-            revert InvalidTickRange();
-        }
-
-        // 验证 tick 必须是 tickSpacing 的倍数
-        if (lowerTick % int24(tickSpacing) != 0 || upperTick % int24(tickSpacing) != 0) {
-            revert TickSpacingMismatch();
-        }
-
         if (amount == 0) revert ZeroLiquidity();
 
-        // ==================== E: EFFECTS（效果）==================
-        // CEI 模式的关键：在调用外部合约前更新所有状态
-        // 这样即使发生重入，重入者看到的也是最新状态
+        // 使用 _modifyPosition 更新状态
+        (, int256 amount0Int, int256 amount1Int) = _modifyPosition(
+            ModifyPositionParams({
+                owner: owner,
+                lowerTick: lowerTick,
+                upperTick: upperTick,
+                liquidityDelta: int128(amount)
+            })
+        );
 
-        // 步骤 2: 更新 Tick 和位图索引
-        bool flippedLower = ticks.update(lowerTick, int128(amount), false);
-        bool flippedUpper = ticks.update(upperTick, int128(amount), true);
-        
-        // 如果下边界 Tick 状态发生翻转，更新位图索引
-        if (flippedLower) {
-            tickBitmap.flipTick(lowerTick, 1);
-        }
+        amount0 = uint256(amount0Int);
+        amount1 = uint256(amount1Int);
 
-        // 如果上边界 Tick 状态发生翻转，更新位图索引
-        if (flippedUpper) {
-            tickBitmap.flipTick(upperTick, 1);
-        }
-
-        // 步骤 3: 更新仓位
-        Position.Info storage position = positions.get(owner, lowerTick, upperTick);
-        position.update(amount);
-
-        // 步骤 4: 根据价格区间位置计算代币数量
-        // 获取当前价格状态
-        Slot0 memory slot0_ = slot0;
-
-        if (slot0_.tick < lowerTick) {
-            // 情况1: 价格区间在当前价格之上
-            // 流动性完全由 token0 组成
-            amount0 = Math.calcAmount0Delta(
-                TickMath.getSqrtRatioAtTick(lowerTick),
-                TickMath.getSqrtRatioAtTick(upperTick),
-                amount
-            );
-            amount1 = 0;
-
-        } else if (slot0_.tick < upperTick) {
-            // 情况2: 价格区间包含当前价格
-            // 流动性由两种代币按比例组成
-            amount0 = Math.calcAmount0Delta(
-                slot0_.sqrtPriceX96,
-                TickMath.getSqrtRatioAtTick(upperTick),
-                amount
-            );
-
-            amount1 = Math.calcAmount1Delta(
-                slot0_.sqrtPriceX96,
-                TickMath.getSqrtRatioAtTick(lowerTick),
-                amount
-            );
-
-            // 只有这种情况才更新流动性跟踪器
-            liquidity = LiquidityMath.addLiquidity(liquidity, int128(amount));
-
-        } else {
-            // 情况3: 价格区间在当前价格之下
-            // 流动性完全由 token1 组成
-            amount0 = 0;
-            amount1 = Math.calcAmount1Delta(
-                TickMath.getSqrtRatioAtTick(lowerTick),
-                TickMath.getSqrtRatioAtTick(upperTick),
-                amount
-            );
-        }
-
-        // ==================== I: INTERACTIONS（交互）=============
-        // 步骤 5: 通过回调接收代币
-        // 回调机制说明：
-        // 1. 先记录当前余额
-        // 2. 调用 msg.sender 的回调函数，告诉它需要转多少代币
-        // 3. 回调函数应该将代币转入本合约
-        // 4. 回调返回后，验证余额是否增加了
-        // 优势：合约控制代币数量计算，防止用户作弊
+        // 通过回调接收代币
         uint256 balance0Before;
         uint256 balance1Before;
         if (amount0 > 0) balance0Before = balance0();
         if (amount1 > 0) balance1Before = balance1();
 
-        // 调用回调函数 - 调用者必须实现此接口，传递额外数据
         IUniswapV3MintCallback(msg.sender).uniswapV3MintCallback(amount0, amount1, data);
 
-        // ==================== C: CHECK（再次检查）===============
-        // 步骤 6: 验证余额变化
-        // 确保调用者在回调中真的转入了代币
+        // 验证余额变化
         if (amount0 > 0 && balance0() < balance0Before + amount0) {
             revert InsufficientInputAmount();
         }
@@ -292,7 +259,6 @@ contract UniswapV3Pool {
             revert InsufficientInputAmount();
         }
 
-        // 步骤 7: 发出事件
         emit Mint(msg.sender, owner, lowerTick, upperTick, amount, amount0, amount1);
     }
 
@@ -373,7 +339,7 @@ contract UniswapV3Pool {
             step.sqrtPriceNextX96 = TickMath.getSqrtRatioAtTick(step.nextTick);
 
             // 计算当前价格区间可提供的交换金额
-            (state.sqrtPriceX96, step.amountIn, step.amountOut) = SwapMath
+            (state.sqrtPriceX96, step.amountIn, step.amountOut, step.feeAmount) = SwapMath
                 .computeSwapStep(
                     state.sqrtPriceX96,
                     (
@@ -389,19 +355,40 @@ contract UniswapV3Pool {
                         : step.sqrtPriceNextX96, // 使用下一个 tick 的价格
                     state.liquidity,
                     state.amountSpecifiedRemaining,
-                    zeroForOne
+                    fee
                 );
 
             // 更新交换状态
-            state.amountSpecifiedRemaining -= step.amountIn;
+            state.amountSpecifiedRemaining -= (step.amountIn + step.feeAmount);
             state.amountCalculated += step.amountOut;
+
+            // 更新全局费用累积器
+            if (state.liquidity > 0) {
+                if (zeroForOne) {
+                    feeGrowthGlobal0X128 += Math.mulDiv(
+                        step.feeAmount,
+                        0x100000000000000000000000000000000,  // 2^128
+                        state.liquidity
+                    );
+                } else {
+                    feeGrowthGlobal1X128 += Math.mulDiv(
+                        step.feeAmount,
+                        0x100000000000000000000000000000000,  // 2^128
+                        state.liquidity
+                    );
+                }
+            }
 
             // 检查是否到达了价格区间边界
             if (state.sqrtPriceX96 == step.sqrtPriceNextX96) {
                 // 到达边界，需要处理tick交叉
                 if (step.initialized) {
-                    // 获取tick交叉时的流动性变化
-                    int128 liquidityDelta = ticks.cross(step.nextTick);
+                    // 获取tick交叉时的流动性变化，并翻转费用记录
+                    int128 liquidityDelta = ticks.cross(
+                        step.nextTick,
+                        feeGrowthGlobal0X128,
+                        feeGrowthGlobal1X128
+                    );
 
                     // 根据交换方向调整流动性变化符号
                     if (zeroForOne) liquidityDelta = -liquidityDelta;
@@ -526,5 +513,225 @@ contract UniswapV3Pool {
 
         // 步骤5: 触发事件
         emit Flash(msg.sender, recipient, amount0, amount1);
+    }
+
+    /// @notice 移除流动性
+    /// @dev 重要说明：
+    ///      1. 为什么需要 lowerTick 和 upperTick 参数？
+    ///         - 每个 Position 由 (owner, lowerTick, upperTick) 三元组唯一标识
+    ///         - 用户可以在多个不同的价格区间创建独立的流动性仓位
+    ///         - 例如：Alice 可以同时拥有 [100,200]、[300,400]、[500,600] 三个独立仓位
+    ///         - 必须明确指定要操作哪个价格区间的仓位
+    ///      2. burn 只是"标记移除"，并不实际转出代币
+    ///         - 将可提取的代币数量记录到 position.tokensOwed0/tokensOwed1
+    ///         - 用户需要额外调用 collect() 函数才能真正提取代币
+    /// @param lowerTick 价格区间下限（用于定位具体的 Position）
+    /// @param upperTick 价格区间上限（用于定位具体的 Position）
+    /// @param amount 要移除的流动性数量
+    /// @return amount0 可提取的 token0 数量
+    /// @return amount1 可提取的 token1 数量
+    function burn(
+        int24 lowerTick,
+        int24 upperTick,
+        uint128 amount
+    ) public returns (uint256 amount0, uint256 amount1) {
+        // 使用负数的流动性增量来移除流动性
+        // 通过 (msg.sender, lowerTick, upperTick) 定位到具体的 Position
+        (Position.Info storage position, int256 amount0Int, int256 amount1Int) =
+            _modifyPosition(
+                ModifyPositionParams({
+                    owner: msg.sender,
+                    lowerTick: lowerTick,
+                    upperTick: upperTick,
+                    liquidityDelta: -int128(amount)  // 负数表示移除
+                })
+            );
+
+        // 将返还的代币数量（包括本金+手续费）记录到仓位
+        // 注意：这里只是记账，并未实际转出代币
+        amount0 = uint256(-amount0Int);
+        amount1 = uint256(-amount1Int);
+
+        if (amount0 > 0 || amount1 > 0) {
+            (position.tokensOwed0, position.tokensOwed1) = (
+                position.tokensOwed0 + uint128(amount0),
+                position.tokensOwed1 + uint128(amount1)
+            );
+        }
+
+        emit Burn(msg.sender, lowerTick, upperTick, amount, amount0, amount1);
+    }
+
+    /// @notice 提取代币
+    /// @dev 重要说明：
+    ///      1. 为什么需要 lowerTick 和 upperTick 参数？
+    ///         - 每个 Position 由 (owner, lowerTick, upperTick) 三元组唯一标识
+    ///         - 用户可能在多个价格区间都有流动性仓位和累积的手续费
+    ///         - 必须明确指定要从哪个价格区间提取收益
+    ///      2. collect 的资金来源
+    ///         - position.tokensOwed0/tokensOwed1 记录了可提取的代币数量
+    ///         - 这些数量来自两部分：
+    ///           a) burn() 移除流动性后的本金归还
+    ///           b) 交易手续费的自然累积（通过 position.update() 计算）
+    ///      3. 灵活的提取机制
+    ///         - 可以只提取部分金额（amount0Requested < tokensOwed0）
+    ///         - 可以提取到指定的 recipient 地址
+    /// @param recipient 接收代币的地址
+    /// @param lowerTick 价格区间下限（用于定位具体的 Position）
+    /// @param upperTick 价格区间上限（用于定位具体的 Position）
+    /// @param amount0Requested 请求提取的 token0 数量
+    /// @param amount1Requested 请求提取的 token1 数量
+    /// @return amount0 实际提取的 token0 数量
+    /// @return amount1 实际提取的 token1 数量
+    function collect(
+        address recipient,
+        int24 lowerTick,
+        int24 upperTick,
+        uint128 amount0Requested,
+        uint128 amount1Requested
+    ) public returns (uint128 amount0, uint128 amount1) {
+        // 通过 (msg.sender, lowerTick, upperTick) 定位到具体的 Position
+        Position.Info storage position = positions.get(
+            msg.sender,
+            lowerTick,
+            upperTick
+        );
+
+        // 确保不能提取超过欠款的金额
+        // 实际提取金额 = min(请求金额, 欠款金额)
+        amount0 = amount0Requested > position.tokensOwed0
+            ? position.tokensOwed0
+            : amount0Requested;
+        amount1 = amount1Requested > position.tokensOwed1
+            ? position.tokensOwed1
+            : amount1Requested;
+
+        // 更新欠款并转账
+        if (amount0 > 0) {
+            position.tokensOwed0 -= amount0;
+            IERC20(token0).transfer(recipient, amount0);
+        }
+
+        if (amount1 > 0) {
+            position.tokensOwed1 -= amount1;
+            IERC20(token1).transfer(recipient, amount1);
+        }
+
+        emit Collect(msg.sender, recipient, lowerTick, upperTick, amount0, amount1);
+    }
+
+    /// @notice 修改仓位流动性的内部函数
+    /// @param params 修改参数
+    /// @return position 仓位信息
+    /// @return amount0 token0 数量变化
+    /// @return amount1 token1 数量变化
+    function _modifyPosition(ModifyPositionParams memory params)
+        internal
+        returns (
+            Position.Info storage position,
+            int256 amount0,
+            int256 amount1
+        )
+    {
+        // 验证 tick 范围
+        if (params.lowerTick >= params.upperTick ||
+            params.lowerTick < MIN_TICK ||
+            params.upperTick > MAX_TICK) {
+            revert InvalidTickRange();
+        }
+
+        // 验证 tick spacing
+        if (params.lowerTick % int24(tickSpacing) != 0 ||
+            params.upperTick % int24(tickSpacing) != 0) {
+            revert TickSpacingMismatch();
+        }
+
+        Slot0 memory slot0_ = slot0;
+
+        // 更新 Tick
+        bool flippedLower;
+        bool flippedUpper;
+        if (params.liquidityDelta != 0) {
+            flippedLower = ticks.update(params.lowerTick, params.liquidityDelta, false);
+            flippedUpper = ticks.update(params.upperTick, params.liquidityDelta, true);
+
+            // 更新位图
+            if (flippedLower) {
+                tickBitmap.flipTick(params.lowerTick, int24(tickSpacing));
+            }
+            if (flippedUpper) {
+                tickBitmap.flipTick(params.upperTick, int24(tickSpacing));
+            }
+        }
+
+        // 计算区间内累积的费用
+        (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) = ticks
+            .getFeeGrowthInside(
+                params.lowerTick,
+                params.upperTick,
+                slot0_.tick,
+                feeGrowthGlobal0X128,
+                feeGrowthGlobal1X128
+            );
+
+        // 更新仓位
+        position = positions.get(params.owner, params.lowerTick, params.upperTick);
+        position.update(params.liquidityDelta, feeGrowthInside0X128, feeGrowthInside1X128);
+
+        // 计算代币数量变化
+        if (slot0_.tick < params.lowerTick) {
+            // 价格区间在当前价格之上
+            amount0 = int256(
+                Math.calcAmount0Delta(
+                    TickMath.getSqrtRatioAtTick(params.lowerTick),
+                    TickMath.getSqrtRatioAtTick(params.upperTick),
+                    params.liquidityDelta < 0
+                        ? uint128(-params.liquidityDelta)
+                        : uint128(params.liquidityDelta)
+                )
+            );
+            if (params.liquidityDelta < 0) amount0 = -amount0;
+        } else if (slot0_.tick < params.upperTick) {
+            // 价格区间包含当前价格
+            amount0 = int256(
+                Math.calcAmount0Delta(
+                    slot0_.sqrtPriceX96,
+                    TickMath.getSqrtRatioAtTick(params.upperTick),
+                    params.liquidityDelta < 0
+                        ? uint128(-params.liquidityDelta)
+                        : uint128(params.liquidityDelta)
+                )
+            );
+
+            amount1 = int256(
+                Math.calcAmount1Delta(
+                    TickMath.getSqrtRatioAtTick(params.lowerTick),
+                    slot0_.sqrtPriceX96,
+                    params.liquidityDelta < 0
+                        ? uint128(-params.liquidityDelta)
+                        : uint128(params.liquidityDelta)
+                )
+            );
+
+            if (params.liquidityDelta < 0) {
+                amount0 = -amount0;
+                amount1 = -amount1;
+            }
+
+            // 更新全局流动性
+            liquidity = LiquidityMath.addLiquidity(liquidity, params.liquidityDelta);
+        } else {
+            // 价格区间在当前价格之下
+            amount1 = int256(
+                Math.calcAmount1Delta(
+                    TickMath.getSqrtRatioAtTick(params.lowerTick),
+                    TickMath.getSqrtRatioAtTick(params.upperTick),
+                    params.liquidityDelta < 0
+                        ? uint128(-params.liquidityDelta)
+                        : uint128(params.liquidityDelta)
+                )
+            );
+            if (params.liquidityDelta < 0) amount1 = -amount1;
+        }
     }
 }

@@ -15,6 +15,8 @@ interface IUniswapV3PoolDeployer {
         address token1;
         /// @notice Tick 间距（决定价格精度）
         uint24 tickSpacing;
+        /// @notice 手续费率（以百万分之一为单位）
+        uint24 fee;
     }
 
     /// @notice 获取池子部署参数
@@ -22,6 +24,7 @@ interface IUniswapV3PoolDeployer {
     /// @return token0 代币0地址
     /// @return token1 代币1地址
     /// @return tickSpacing Tick 间距
+    /// @return fee 手续费率
     function parameters()
         external
         view
@@ -29,6 +32,7 @@ interface IUniswapV3PoolDeployer {
             address factory,
             address token0,
             address token1,
-            uint24 tickSpacing
+            uint24 tickSpacing,
+            uint24 fee
         );
 }
