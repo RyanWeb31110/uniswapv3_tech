@@ -3,15 +3,17 @@ pragma solidity ^0.8.14;
 
 import "forge-std/Test.sol";
 import "../src/UniswapV3Pool.sol";
+import "../src/UniswapV3Factory.sol";
 import "../src/SimpleFlashBorrower.sol";
 import "../src/interfaces/IUniswapV3MintCallback.sol";
 import "./ERC20Mintable.sol";
 
 /// @title 闪电贷测试合约
-/// @notice 测试 Uniswap V3 闪电贷功能的完整性和安全性
+/// @notice 测试 Uniswap V3 闪电贷功能的完整性和安全性（包含手续费）
 contract FlashLoanTest is Test, IUniswapV3MintCallback {
 
     // 合约实例
+    UniswapV3Factory factory;
     UniswapV3Pool pool;
     SimpleFlashBorrower borrower;
     ERC20Mintable token0;
@@ -24,32 +26,40 @@ contract FlashLoanTest is Test, IUniswapV3MintCallback {
     /// @notice 测试初始化
     /// @dev 部署合约、创建池子、添加流动性
     function setUp() public {
+        // 部署 Factory
+        factory = new UniswapV3Factory();
+
         // 部署代币
         token0 = new ERC20Mintable("Token0", "TK0", 18);
         token1 = new ERC20Mintable("Token1", "TK1", 18);
 
-        // 部署池子
-        // 使用简单的初始价格：1:1
-        // sqrtPriceX96 = sqrt(1) * 2^96 = 2^96 = 79228162514264337593543950336
-        pool = new UniswapV3Pool(
+        // 确保 token0 < token1（地址排序）
+        if (address(token0) > address(token1)) {
+            (token0, token1) = (token1, token0);
+        }
+
+        // 创建池子（手续费 0.3% = 3000，tickSpacing = 60）
+        address poolAddress = factory.createPool(
             address(token0),
             address(token1),
-            79228162514264337593543950336,  // sqrt(1) * 2^96
-            0                                 // tick at price 1
+            60,   // tickSpacing
+            3000  // fee (0.3%)
         );
+        pool = UniswapV3Pool(poolAddress);
+
+        // 初始化池子价格：1:1
+        // sqrtPriceX96 = sqrt(1) * 2^96 = 2^96 = 79228162514264337593543950336
+        pool.initialize(79228162514264337593543950336);
 
         // 添加流动性（提供充足的代币供闪电贷使用）
         token0.mint(address(this), 1000 ether);
         token1.mint(address(this), 1000 ether);
 
-        token0.approve(address(pool), type(uint256).max);
-        token1.approve(address(pool), type(uint256).max);
-
         // 在当前价格附近添加流动性
         pool.mint(
             address(this),
-            -100,  // lower tick
-            100,   // upper tick
+            -600,  // lower tick (必须是 tickSpacing 的倍数)
+            600,   // upper tick
             100 ether,
             abi.encode(address(token0), address(token1), address(this))
         );
@@ -80,8 +90,8 @@ contract FlashLoanTest is Test, IUniswapV3MintCallback {
         }
     }
 
-    /// @notice 测试：成功的闪电贷
-    /// @dev 验证借款和还款流程的正确性
+    /// @notice 测试：成功的闪电贷（包含手续费）
+    /// @dev 验证借款和还款流程的正确性，以及手续费的收取
     function testFlashSuccess() public {
         // 记录池子的初始余额
         uint256 poolBalance0Before = token0.balanceOf(address(pool));
@@ -90,13 +100,20 @@ contract FlashLoanTest is Test, IUniswapV3MintCallback {
         console.log("Pool balance0 before:", poolBalance0Before);
         console.log("Pool balance1 before:", poolBalance1Before);
 
-        // 准备：给借款人合约足够的代币用于归还
+        // 准备：给借款人合约足够的代币用于归还（包含手续费）
         // 借出池子的一半代币
         uint256 borrowAmount0 = poolBalance0Before / 2;
         uint256 borrowAmount1 = poolBalance1Before / 2;
 
-        token0.mint(address(borrower), borrowAmount0);
-        token1.mint(address(borrower), borrowAmount1);
+        // 计算手续费（模拟池子的计算逻辑）
+        uint24 poolFee = pool.fee();
+        // 向上取整：(amount * fee + 999999) / 1e6
+        uint256 expectedFee0 = (borrowAmount0 * poolFee + 999999) / 1e6;
+        uint256 expectedFee1 = (borrowAmount1 * poolFee + 999999) / 1e6;
+
+        // 给借款人足够的代币：借款金额 + 手续费
+        token0.mint(address(borrower), borrowAmount0 + expectedFee0);
+        token1.mint(address(borrower), borrowAmount1 + expectedFee1);
 
         // 执行闪电贷
         vm.prank(alice);
@@ -106,15 +123,17 @@ contract FlashLoanTest is Test, IUniswapV3MintCallback {
             borrowAmount1
         );
 
-        // 验证：池子余额应该保持不变（或增加手续费）
+        // 验证：池子余额应该增加手续费
         uint256 poolBalance0After = token0.balanceOf(address(pool));
         uint256 poolBalance1After = token1.balanceOf(address(pool));
 
         console.log("Pool balance0 after:", poolBalance0After);
         console.log("Pool balance1 after:", poolBalance1After);
+        console.log("Fee0 paid:", poolBalance0After - poolBalance0Before);
+        console.log("Fee1 paid:", poolBalance1After - poolBalance1Before);
 
-        assertGe(poolBalance0After, poolBalance0Before, "Pool should have at least initial balance of token0");
-        assertGe(poolBalance1After, poolBalance1Before, "Pool should have at least initial balance of token1");
+        assertEq(poolBalance0After, poolBalance0Before + expectedFee0, "Pool balance0 should increase by fee");
+        assertEq(poolBalance1After, poolBalance1Before + expectedFee1, "Pool balance1 should increase by fee");
     }
 
     /// @notice 测试：未归还闪电贷应该回滚
@@ -126,8 +145,8 @@ contract FlashLoanTest is Test, IUniswapV3MintCallback {
         // 创建一个不归还代币的恶意合约
         NonReturningBorrower nonReturning = new NonReturningBorrower();
 
-        // 预期交易回滚，并显示错误信息
-        vm.expectRevert("Flash loan not repaid: token0");
+        // 预期交易回滚
+        vm.expectRevert(UniswapV3Pool.FlashLoanNotPaid.selector);
 
         nonReturning.executeBadFlash(address(pool), borrowAmount);
     }
@@ -142,9 +161,14 @@ contract FlashLoanTest is Test, IUniswapV3MintCallback {
         console.log("Total pool balance0:", poolBalance0);
         console.log("Total pool balance1:", poolBalance1);
 
-        // 给借款人合约足够的代币
-        token0.mint(address(borrower), poolBalance0);
-        token1.mint(address(borrower), poolBalance1);
+        // 计算手续费
+        uint24 poolFee = pool.fee();
+        uint256 fee0 = (poolBalance0 * poolFee + 999999) / 1e6;
+        uint256 fee1 = (poolBalance1 * poolFee + 999999) / 1e6;
+
+        // 给借款人合约足够的代币（只需要手续费，因为借的会还回来）
+        token0.mint(address(borrower), fee0);
+        token1.mint(address(borrower), fee1);
 
         // 借出全部流动性
         vm.prank(alice);
@@ -155,15 +179,15 @@ contract FlashLoanTest is Test, IUniswapV3MintCallback {
         );
 
         // 验证成功
-        assertGe(
+        assertEq(
             token0.balanceOf(address(pool)),
-            poolBalance0,
-            "All liquidity should be returned for token0"
+            poolBalance0 + fee0,
+            "Pool should have initial balance + fee for token0"
         );
-        assertGe(
+        assertEq(
             token1.balanceOf(address(pool)),
-            poolBalance1,
-            "All liquidity should be returned for token1"
+            poolBalance1 + fee1,
+            "Pool should have initial balance + fee for token1"
         );
     }
 
@@ -174,7 +198,10 @@ contract FlashLoanTest is Test, IUniswapV3MintCallback {
 
         // 给借款人合约足够的代币
         uint256 borrowAmount = poolBalance0Before / 2;
-        token0.mint(address(borrower), borrowAmount);
+        uint24 poolFee = pool.fee();
+        uint256 expectedFee = (borrowAmount * poolFee + 999999) / 1e6;
+
+        token0.mint(address(borrower), expectedFee);
 
         // 只借 token0
         vm.prank(alice);
@@ -186,7 +213,7 @@ contract FlashLoanTest is Test, IUniswapV3MintCallback {
 
         uint256 poolBalance0After = token0.balanceOf(address(pool));
 
-        assertGe(poolBalance0After, poolBalance0Before, "Token0 should be repaid");
+        assertEq(poolBalance0After, poolBalance0Before + expectedFee, "Token0 should be repaid with fee");
     }
 
     /// @notice 测试：闪电贷事件
@@ -196,7 +223,13 @@ contract FlashLoanTest is Test, IUniswapV3MintCallback {
         uint256 borrowAmount = poolBalance0 / 2;
 
         // 给借款人合约足够的代币
-        token0.mint(address(borrower), borrowAmount);
+        uint24 poolFee = pool.fee();
+        uint256 expectedFee = (borrowAmount * poolFee + 999999) / 1e6;
+        token0.mint(address(borrower), expectedFee);
+
+        // 期望事件被触发
+        vm.expectEmit(true, true, false, true);
+        emit Flash(address(borrower), address(borrower), borrowAmount, 0);
 
         // 执行闪电贷
         vm.prank(alice);
@@ -205,13 +238,10 @@ contract FlashLoanTest is Test, IUniswapV3MintCallback {
             borrowAmount,
             0
         );
-
-        // 验证成功完成（如果事件有问题也能通过）
-        assertGe(token0.balanceOf(address(pool)), 0, "Flash loan completed");
     }
 
     /// @notice 测试：部分归还应该失败
-    /// @dev 验证必须完全归还借款
+    /// @dev 验证必须完全归还借款 + 手续费
     function testFlashPartialRepaymentFails() public {
         uint256 poolBalance0 = token0.balanceOf(address(pool));
         uint256 borrowAmount = poolBalance0 / 2;
@@ -223,10 +253,87 @@ contract FlashLoanTest is Test, IUniswapV3MintCallback {
         token0.mint(address(malicious), borrowAmount / 2);
 
         // 预期交易回滚
-        vm.expectRevert("Flash loan not repaid: token0");
+        vm.expectRevert(UniswapV3Pool.FlashLoanNotPaid.selector);
 
         malicious.executeMaliciousFlash(address(pool), borrowAmount);
     }
+
+    /// @notice 测试：手续费计算的正确性
+    /// @dev 验证向上取整的手续费计算
+    function testFlashFeeCalculation() public {
+        // 记录池子初始余额
+        uint256 poolBalance0Before = token0.balanceOf(address(pool));
+
+        // 借出 100 token0
+        uint256 borrowAmount = 100 ether;
+
+        // 预期手续费 = 100 * 3000 / 1e6 = 0.3 ether
+        uint24 poolFee = pool.fee();
+        uint256 expectedFee = (borrowAmount * poolFee + 999999) / 1e6;
+
+        console.log("Borrow amount:", borrowAmount / 1 ether);
+        console.log("Pool fee:", poolFee);
+        console.log("Expected fee:", expectedFee);
+
+        // 给借款人足够的代币支付手续费
+        token0.mint(address(borrower), expectedFee);
+
+        // 执行闪电贷
+        borrower.executeFlashLoan(address(pool), borrowAmount, 0);
+
+        // 验证：池子余额应该增加手续费金额
+        uint256 poolBalance0After = token0.balanceOf(address(pool));
+        assertEq(
+            poolBalance0After,
+            poolBalance0Before + expectedFee,
+            "Pool balance should increase by fee amount"
+        );
+
+        console.log("Borrowed:", borrowAmount / 1 ether);
+        console.log("Fee paid:", expectedFee / 1 ether);
+        console.log("Pool profit:", (poolBalance0After - poolBalance0Before) / 1 ether);
+    }
+
+    /// @notice 测试：向上取整的手续费计算
+    /// @dev 即使借出极小金额也要收取手续费
+    function testFlashFeeRoundingUp() public {
+        // 借出极小金额，测试向上取整
+        uint256 tinyAmount = 1000; // 1000 wei
+
+        // 预期手续费会向上取整
+        uint24 poolFee = pool.fee();
+        uint256 expectedFee = (tinyAmount * poolFee + 999999) / 1e6;
+
+        // 给借款人足够的代币
+        token0.mint(address(borrower), expectedFee);
+
+        uint256 poolBalanceBefore = token0.balanceOf(address(pool));
+
+        borrower.executeFlashLoan(address(pool), tinyAmount, 0);
+
+        uint256 poolBalanceAfter = token0.balanceOf(address(pool));
+
+        // 验证：即使是极小的借款也要收取手续费
+        assertGt(
+            poolBalanceAfter,
+            poolBalanceBefore,
+            "Even tiny amounts should incur fees"
+        );
+
+        assertEq(
+            poolBalanceAfter - poolBalanceBefore,
+            expectedFee,
+            "Fee should match expected value"
+        );
+    }
+
+    /// @notice Flash 事件定义（用于测试）
+    event Flash(
+        address indexed sender,
+        address indexed recipient,
+        uint256 amount0,
+        uint256 amount1
+    );
 }
 
 /// @title 不归还代币的借款人合约
@@ -241,7 +348,11 @@ contract NonReturningBorrower {
         );
     }
 
-    function uniswapV3FlashCallback(bytes calldata) external {
+    function uniswapV3FlashCallback(
+        uint256,
+        uint256,
+        bytes calldata
+    ) external {
         // 什么都不做，不归还任何代币
         // 这将导致闪电贷验证失败
     }
@@ -259,7 +370,11 @@ contract MaliciousBorrower {
         );
     }
 
-    function uniswapV3FlashCallback(bytes calldata) external {
+    function uniswapV3FlashCallback(
+        uint256,
+        uint256,
+        bytes calldata
+    ) external {
         // 获取池子地址
         address pool = msg.sender;
 

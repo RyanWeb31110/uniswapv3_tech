@@ -128,6 +128,7 @@ contract UniswapV3Pool {
     error InvalidPriceLimit();
     error AlreadyInitialized();
     error TickSpacingMismatch();
+    error FlashLoanNotPaid();
 
     // ============ 事件定义 ============
 
@@ -464,13 +465,14 @@ contract UniswapV3Pool {
         );
     }
 
-    /// @notice 执行闪电贷
-    /// @dev 任何人都可以调用此函数借出代币，但必须在回调中归还
+    /// @notice 执行闪电贷（收费版本）
+    /// @dev 任何人都可以调用此函数借出代币，但必须在回调中归还代币+手续费
     ///      闪电贷的核心机制：
-    ///      1. 先无条件转出代币给借款人
-    ///      2. 调用借款人的回调函数，让其执行操作并归还代币
-    ///      3. 验证余额是否足够（必须 >= 贷前余额）
-    ///      4. 如果余额不足，整个交易回滚，代币不会丢失
+    ///      1. 计算手续费（使用向上取整）
+    ///      2. 先无条件转出代币给借款人
+    ///      3. 调用借款人的回调函数，让其执行操作并归还代币
+    ///      4. 验证余额是否足够（必须 >= 贷前余额 + 手续费）
+    ///      5. 如果余额不足，整个交易回滚，代币不会丢失
     /// @param recipient 接收代币的地址
     /// @param amount0 请求借出的 token0 数量
     /// @param amount1 请求借出的 token1 数量
@@ -481,37 +483,43 @@ contract UniswapV3Pool {
         uint256 amount1,
         bytes calldata data
     ) public {
-        // 步骤1: 记录贷款前的余额
-        // 这是验证还款的关键——贷后余额必须大于等于贷前余额
+        // 步骤1: 计算手续费
+        // 使用向上取整确保池子不会损失（即使是很小的金额也要收费）
+        uint256 fee0 = Math.mulDivRoundingUp(amount0, fee, 1e6);
+        uint256 fee1 = Math.mulDivRoundingUp(amount1, fee, 1e6);
+
+        // 步骤2: 记录贷款前的余额
+        // 这是验证还款的关键——贷后余额必须大于等于贷前余额 + 手续费
         uint256 balance0Before = balance0();
         uint256 balance1Before = balance1();
 
-        // 步骤2: 转出代币给借款人
+        // 步骤3: 转出代币给借款人
         // 注意：这里是无条件转出，不检查任何抵押品
         // 依赖原子性保证：如果最后验证失败，整个交易回滚
         if (amount0 > 0) IERC20(token0).transfer(recipient, amount0);
         if (amount1 > 0) IERC20(token1).transfer(recipient, amount1);
 
-        // 步骤3: 调用借款人合约的回调函数
+        // 步骤4: 调用借款人合约的回调函数
+        // 将手续费金额传递给借款人，让其知道需要归还多少
         // 借款人需要在这个回调中：
         // 1. 使用借到的代币执行操作（套利、清算等）
-        // 2. 归还代币到本合约
+        // 2. 归还代币到本合约（包含手续费）
         // 注意：回调的调用者是 msg.sender（发起闪电贷的地址）
-        IUniswapV3FlashCallback(msg.sender).uniswapV3FlashCallback(data);
-
-        // 步骤4: 验证还款
-        // 检查当前余额是否大于等于贷款前余额
-        // 如果借款人没有还钱，这里会回滚整个交易
-        require(
-            balance0() >= balance0Before,
-            "Flash loan not repaid: token0"
-        );
-        require(
-            balance1() >= balance1Before,
-            "Flash loan not repaid: token1"
+        IUniswapV3FlashCallback(msg.sender).uniswapV3FlashCallback(
+            fee0,
+            fee1,
+            data
         );
 
-        // 步骤5: 触发事件
+        // 步骤5: 验证还款（包含手续费）
+        // 关键改变：现在要求余额必须增加手续费金额
+        // 如果借款人没有还够钱，这里会回滚整个交易
+        if (balance0() < balance0Before + fee0)
+            revert FlashLoanNotPaid();
+        if (balance1() < balance1Before + fee1)
+            revert FlashLoanNotPaid();
+
+        // 步骤6: 触发事件
         emit Flash(msg.sender, recipient, amount0, amount1);
     }
 

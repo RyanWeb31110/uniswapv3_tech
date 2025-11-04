@@ -38,9 +38,15 @@ contract SimpleFlashBorrower is IUniswapV3FlashCallback {
     /// @dev 池子合约会调用这个函数
     ///      在这个函数中，我们需要：
     ///      1. 使用借到的代币执行操作
-    ///      2. 归还代币到池子合约
+    ///      2. 归还代币到池子合约（包含手续费）
+    /// @param fee0 需要支付的 token0 手续费
+    /// @param fee1 需要支付的 token1 手续费
     /// @param data 编码的回调数据
-    function uniswapV3FlashCallback(bytes calldata data) external override {
+    function uniswapV3FlashCallback(
+        uint256 fee0,
+        uint256 fee1,
+        bytes calldata data
+    ) external override {
         // 解码回调数据
         (uint256 amount0, uint256 amount1) = abi.decode(
             data,
@@ -53,19 +59,24 @@ contract SimpleFlashBorrower is IUniswapV3FlashCallback {
         // 🎯 在这里可以使用借到的代币执行操作
         // 例如：套利、清算、杠杆操作等
         // ...
-        // 注意：在实际应用中，这里的操作需要确保最终有足够的代币归还
+        // 注意：在实际应用中，这里的操作需要确保最终有足够的代币归还（包含手续费）
 
-        // 归还代币到池子
+        // 归还代币到池子（包含手续费）
+        // 应还金额 = 借款金额 + 手续费
         // 在实际应用中，这里需要确保有足够的代币来归还
         // 对于这个简单示例，假设合约已经预先存入了足够的代币
-        if (amount0 > 0) {
+        if (amount0 > 0 || fee0 > 0) {
             IERC20 token0 = IERC20(IUniswapV3Pool(pool).token0());
-            token0.transfer(pool, amount0);
+            // 归还借款 + 手续费
+            uint256 amountOwed0 = amount0 + fee0;
+            token0.transfer(pool, amountOwed0);
         }
 
-        if (amount1 > 0) {
+        if (amount1 > 0 || fee1 > 0) {
             IERC20 token1 = IERC20(IUniswapV3Pool(pool).token1());
-            token1.transfer(pool, amount1);
+            // 归还借款 + 手续费
+            uint256 amountOwed1 = amount1 + fee1;
+            token1.transfer(pool, amountOwed1);
         }
     }
 }
