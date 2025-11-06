@@ -11,14 +11,27 @@ interface IUniswapV3Pool {
     struct Slot0 {
         uint160 sqrtPriceX96; // 当前价格的平方根（Q64.96 格式）
         int24 tick;          // 当前价格对应的 Tick
+        uint8 feeProtocol;   // 协议费用比例
     }
-    
+
+    /// @notice 累积的协议费用
+    struct ProtocolFees {
+        uint128 token0;  // 累积的 token0 协议费用
+        uint128 token1;  // 累积的 token1 协议费用
+    }
+
     // ============ 外部函数 ============
-    
+
     /// @notice 获取池子的当前状态
     /// @return sqrtPriceX96 当前价格的平方根
     /// @return tick 当前价格对应的 Tick
-    function slot0() external view returns (uint160 sqrtPriceX96, int24 tick);
+    /// @return feeProtocol 协议费用比例
+    function slot0() external view returns (uint160 sqrtPriceX96, int24 tick, uint8 feeProtocol);
+
+    /// @notice 获取累积的协议费用
+    /// @return token0 累积的 token0 协议费用
+    /// @return token1 累积的 token1 协议费用
+    function protocolFees() external view returns (uint128 token0, uint128 token1);
     
     /// @notice 执行代币交换
     /// @param recipient 接收输出代币的地址
@@ -53,4 +66,21 @@ interface IUniswapV3Pool {
 
     /// @notice 获取 token1 地址
     function token1() external view returns (address);
+
+    /// @notice 设置协议费用比例
+    /// @param feeProtocol0 token0 的协议费用比例 (0 或 4-10)
+    /// @param feeProtocol1 token1 的协议费用比例 (0 或 4-10)
+    function setFeeProtocol(uint8 feeProtocol0, uint8 feeProtocol1) external;
+
+    /// @notice 提取累积的协议费用
+    /// @param recipient 接收地址
+    /// @param amount0Requested 请求提取的 token0 数量
+    /// @param amount1Requested 请求提取的 token1 数量
+    /// @return amount0 实际提取的 token0 数量
+    /// @return amount1 实际提取的 token1 数量
+    function collectProtocol(
+        address recipient,
+        uint128 amount0Requested,
+        uint128 amount1Requested
+    ) external returns (uint128 amount0, uint128 amount1);
 }

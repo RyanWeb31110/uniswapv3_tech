@@ -46,6 +46,7 @@ contract UniswapV3Pool {
         uint160 sqrtPriceX96;             // 当前价格（Q64.96 格式）
         int24 tick;                       // 当前 Tick
         uint128 liquidity;                // 当前流动性
+        uint128 protocolFee;              // 本次交换累积的协议费用
     }
 
     /// @notice 交换步骤状态结构
@@ -96,6 +97,11 @@ contract UniswapV3Pool {
     struct Slot0 {
         uint160 sqrtPriceX96; // 当前平方根价格（Q64.96 格式）
         int24 tick; // 当前 Tick
+        /// @notice 协议费用比例,表示为整数分母 (1/x)
+        /// @dev 存储方式: token0 的费用比例和 token1 的费用比例打包在一个 uint8 中
+        /// feeProtocol % 16 = token0 的协议费用比例
+        /// feeProtocol >> 4 = token1 的协议费用比例
+        uint8 feeProtocol;
     }
 
     Slot0 public slot0;
@@ -110,6 +116,16 @@ contract UniswapV3Pool {
     /// @notice token1 的全局费用累积器
     /// @dev 使用 Q128 定点数格式，记录每单位流动性累积的 token1 手续费
     uint256 public feeGrowthGlobal1X128;
+
+    /// @notice 累积的协议费用
+    /// @dev 使用 token0/token1 的单位表示
+    struct ProtocolFees {
+        uint128 token0;  // 累积的 token0 协议费用
+        uint128 token1;  // 累积的 token1 协议费用
+    }
+
+    /// @notice 协议费用累积器
+    ProtocolFees public protocolFees;
 
     /// @notice Tick 状态映射
     mapping(int24 => Tick.Info) public ticks;
@@ -129,6 +145,7 @@ contract UniswapV3Pool {
     error AlreadyInitialized();
     error TickSpacingMismatch();
     error FlashLoanNotPaid();
+    error Unauthorized();
 
     // ============ 事件定义 ============
 
@@ -186,6 +203,22 @@ contract UniswapV3Pool {
         uint256 amount1
     );
 
+    /// @notice 设置协议费用事件
+    event SetFeeProtocol(
+        uint8 feeProtocol0Old,
+        uint8 feeProtocol1Old,
+        uint8 feeProtocol0New,
+        uint8 feeProtocol1New
+    );
+
+    /// @notice 提取协议费用事件
+    event CollectProtocol(
+        address indexed sender,
+        address indexed recipient,
+        uint128 amount0,
+        uint128 amount1
+    );
+
     // ============ 构造函数 ============
 
     /// @notice 创建新的交易池
@@ -209,8 +242,8 @@ contract UniswapV3Pool {
         // 根据价格计算对应的 tick
         int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
 
-        // 设置初始状态
-        slot0 = Slot0({sqrtPriceX96: sqrtPriceX96, tick: tick});
+        // 设置初始状态（协议费用默认为 0，即未启用）
+        slot0 = Slot0({sqrtPriceX96: sqrtPriceX96, tick: tick, feeProtocol: 0});
     }
 
     /// @notice 在指定价格区间添加流动性
@@ -294,6 +327,11 @@ contract UniswapV3Pool {
         // 获取当前池子状态
         Slot0 memory slot0_ = slot0;
 
+        // 根据交换方向选择协议费用比例
+        uint8 feeProtocol = zeroForOne
+            ? (slot0_.feeProtocol % 16)      // token0 作为输入,取低 4 位
+            : (slot0_.feeProtocol >> 4);     // token1 作为输入,取高 4 位
+
         // 验证价格限制的有效性
         if (
             zeroForOne
@@ -313,7 +351,8 @@ contract UniswapV3Pool {
             amountCalculated: 0,
             sqrtPriceX96: slot0_.sqrtPriceX96,
             tick: slot0_.tick,
-            liquidity: liquidity
+            liquidity: liquidity,
+            protocolFee: 0  // 初始化协议费用累积器
         });
 
         // 主循环：直到处理完所有输入金额或达到价格限制
@@ -363,7 +402,15 @@ contract UniswapV3Pool {
             state.amountSpecifiedRemaining -= (step.amountIn + step.feeAmount);
             state.amountCalculated += step.amountOut;
 
-            // 更新全局费用累积器
+            // 如果协议费用开关打开,从手续费中扣除协议费用部分
+            if (feeProtocol > 0) {
+                // 从手续费中扣除协议费用
+                uint256 delta = step.feeAmount / feeProtocol;
+                step.feeAmount -= delta;  // LP 获得的手续费减少
+                state.protocolFee += uint128(delta);  // 协议费用增加
+            }
+
+            // 更新全局费用累积器(此时 step.feeAmount 已扣除了协议费用)
             if (state.liquidity > 0) {
                 if (zeroForOne) {
                     feeGrowthGlobal0X128 += Math.mulDiv(
@@ -419,6 +466,15 @@ contract UniswapV3Pool {
 
         // 更新全局流动性变量
         if (liquidity != state.liquidity) liquidity = state.liquidity;
+
+        // 更新全局协议费用累积器
+        if (state.protocolFee > 0) {
+            if (zeroForOne) {
+                protocolFees.token0 += state.protocolFee;
+            } else {
+                protocolFees.token1 += state.protocolFee;
+            }
+        }
 
         // 计算最终的交换金额
         (amount0, amount1) = zeroForOne
@@ -626,6 +682,81 @@ contract UniswapV3Pool {
         }
 
         emit Collect(msg.sender, recipient, lowerTick, upperTick, amount0, amount1);
+    }
+
+    /// @notice 设置协议费用比例
+    /// @dev 只有工厂合约的 owner 可以调用
+    /// @param feeProtocol0 token0 的协议费用比例 (0 或 4-10)
+    /// @param feeProtocol1 token1 的协议费用比例 (0 或 4-10)
+    function setFeeProtocol(uint8 feeProtocol0, uint8 feeProtocol1) external {
+        // 权限检查：只有工厂合约可以调用
+        if (msg.sender != factory) revert Unauthorized();
+
+        // 验证费用比例必须为 0 或在 4-10 之间
+        require(
+            (feeProtocol0 == 0 || (feeProtocol0 >= 4 && feeProtocol0 <= 10)) &&
+            (feeProtocol1 == 0 || (feeProtocol1 >= 4 && feeProtocol1 <= 10)),
+            "Invalid fee protocol"
+        );
+
+        // 保存旧值用于事件
+        uint8 feeProtocolOld = slot0.feeProtocol;
+
+        // 将两个 uint8 打包存储到一个 uint8 中
+        // feeProtocol1 左移 4 位,然后加上 feeProtocol0
+        slot0.feeProtocol = feeProtocol0 + (feeProtocol1 << 4);
+
+        // 触发事件
+        emit SetFeeProtocol(
+            feeProtocolOld % 16,      // 解包旧的 feeProtocol0
+            feeProtocolOld >> 4,      // 解包旧的 feeProtocol1
+            feeProtocol0,
+            feeProtocol1
+        );
+    }
+
+    /// @notice 提取累积的协议费用
+    /// @dev 只有工厂合约的 owner 可以调用
+    /// @param recipient 接收地址
+    /// @param amount0Requested 请求提取的 token0 数量
+    /// @param amount1Requested 请求提取的 token1 数量
+    /// @return amount0 实际提取的 token0 数量
+    /// @return amount1 实际提取的 token1 数量
+    function collectProtocol(
+        address recipient,
+        uint128 amount0Requested,
+        uint128 amount1Requested
+    ) external returns (uint128 amount0, uint128 amount1) {
+        // 权限检查：只有工厂合约可以调用
+        if (msg.sender != factory) revert Unauthorized();
+
+        // 确定实际可以提取的金额(不能超过累积的费用)
+        amount0 = amount0Requested > protocolFees.token0
+            ? protocolFees.token0
+            : amount0Requested;
+        amount1 = amount1Requested > protocolFees.token1
+            ? protocolFees.token1
+            : amount1Requested;
+
+        // 提取 token0
+        if (amount0 > 0) {
+            // 如果提取全部,保留 1 wei 防止清零(Gas 优化)
+            if (amount0 == protocolFees.token0) amount0--;
+
+            protocolFees.token0 -= amount0;
+            IERC20(token0).transfer(recipient, amount0);
+        }
+
+        // 提取 token1
+        if (amount1 > 0) {
+            // 如果提取全部,保留 1 wei 防止清零(Gas 优化)
+            if (amount1 == protocolFees.token1) amount1--;
+
+            protocolFees.token1 -= amount1;
+            IERC20(token1).transfer(recipient, amount1);
+        }
+
+        emit CollectProtocol(msg.sender, recipient, amount0, amount1);
     }
 
     /// @notice 修改仓位流动性的内部函数
