@@ -80,6 +80,24 @@ interface IUniswapV3Pool {
     /// @notice 获取 token1 地址
     function token1() external view returns (address);
 
+    /// @notice 获取指定仓位的信息
+    /// @param key 仓位键（keccak256(owner, lowerTick, upperTick)）
+    /// @return liquidity 流动性数量
+    /// @return feeGrowthInside0LastX128 token0 的内部手续费增长快照
+    /// @return feeGrowthInside1LastX128 token1 的内部手续费增长快照
+    /// @return tokensOwed0 待领取的 token0 手续费
+    /// @return tokensOwed1 待领取的 token1 手续费
+    function positions(bytes32 key)
+        external
+        view
+        returns (
+            uint128 liquidity,
+            uint256 feeGrowthInside0LastX128,
+            uint256 feeGrowthInside1LastX128,
+            uint128 tokensOwed0,
+            uint128 tokensOwed1
+        );
+
     /// @notice 设置协议费用比例
     /// @param feeProtocol0 token0 的协议费用比例 (0 或 4-10)
     /// @param feeProtocol1 token1 的协议费用比例 (0 或 4-10)

@@ -62,6 +62,16 @@ contract UniswapV3Manager {
         address payer;   // 支付输入代币的地址
     }
 
+    /// @notice 获取仓位信息的参数
+    struct GetPositionParams {
+        address tokenA;      // 第一个代币地址
+        address tokenB;      // 第二个代币地址
+        uint24 fee;          // 费率（对应 tickSpacing）
+        address owner;       // 仓位所有者地址
+        int24 lowerTick;     // 价格区间下界
+        int24 upperTick;     // 价格区间上界
+    }
+
     // ==================== 错误定义 ====================
 
     /// @notice 滑点保护失败
@@ -71,6 +81,47 @@ contract UniswapV3Manager {
     error TooLittleReceived(uint256 amountOut);
 
     // ==================== 外部函数 ====================
+
+    /// @notice 获取用户在指定资金池中的流动性仓位信息
+    /// @dev 这是一个只读函数，用于前端查询用户的仓位状态
+    /// @param params 仓位查询参数（包含代币地址、费率、仓位所有者、价格区间）
+    /// @return liquidity 流动性数量
+    /// @return feeGrowthInside0LastX128 token0 的内部手续费增长快照（用于计算新增手续费）
+    /// @return feeGrowthInside1LastX128 token1 的内部手续费增长快照（用于计算新增手续费）
+    /// @return tokensOwed0 待领取的 token0 手续费（已结算但未领取的数量）
+    /// @return tokensOwed1 待领取的 token1 手续费（已结算但未领取的数量）
+    function getPosition(GetPositionParams calldata params)
+        public
+        view
+        returns (
+            uint128 liquidity,
+            uint256 feeGrowthInside0LastX128,
+            uint256 feeGrowthInside1LastX128,
+            uint128 tokensOwed0,
+            uint128 tokensOwed1
+        )
+    {
+        // 通过代币对和费率获取资金池合约
+        IUniswapV3Pool pool = getPool(params.tokenA, params.tokenB, params.fee);
+
+        // 从资金池合约读取仓位信息
+        // 仓位键 = keccak256(abi.encodePacked(owner, lowerTick, upperTick))
+        (
+            liquidity,
+            feeGrowthInside0LastX128,
+            feeGrowthInside1LastX128,
+            tokensOwed0,
+            tokensOwed1
+        ) = pool.positions(
+            keccak256(
+                abi.encodePacked(
+                    params.owner,      // 仓位所有者地址
+                    params.lowerTick,  // 价格区间下界
+                    params.upperTick   // 价格区间上界
+                )
+            )
+        );
+    }
 
     /// @notice 向指定池提供流动性（带滑点保护）
     /// @dev 用户需要先 approve 足够的代币给本合约
@@ -216,19 +267,20 @@ contract UniswapV3Manager {
     // ==================== 内部函数 ====================
 
     /// @notice 获取池合约地址
-    /// @param token0 第一个代币地址
-    /// @param token1 第二个代币地址
-    /// @param tickSpacing Tick 间距
+    /// @dev 可以传入 tokenA 和 tokenB，函数内部会自动排序
+    /// @param tokenA 第一个代币地址（可以是任意顺序）
+    /// @param tokenB 第二个代币地址（可以是任意顺序）
+    /// @param tickSpacing Tick 间距（或费率）
     /// @return pool 池合约实例
     function getPool(
-        address token0,
-        address token1,
+        address tokenA,
+        address tokenB,
         uint24 tickSpacing
     ) internal view returns (IUniswapV3Pool pool) {
         // 确保 token0 < token1（符合 UniswapV3 的地址排序规则）
-        (token0, token1) = token0 < token1
-            ? (token0, token1)
-            : (token1, token0);
+        (address token0, address token1) = tokenA < tokenB
+            ? (tokenA, tokenB)
+            : (tokenB, tokenA);
 
         // 使用 CREATE2 计算池地址（无需查询 Factory）
         pool = IUniswapV3Pool(
