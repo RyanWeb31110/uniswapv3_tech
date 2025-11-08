@@ -202,7 +202,7 @@ contract UniswapV3Quoter is IUniswapV3SwapCallback {
             : uint256(-amount0Delta); // 获得 token0
 
         // 获取交换后的池状态
-        (uint160 sqrtPriceX96After, int24 tickAfter) = IUniswapV3Pool(pool).slot0();
+        (uint160 sqrtPriceX96After, int24 tickAfter, , , , ) = IUniswapV3Pool(pool).slot0();
 
         // 使用内联汇编将数据写入内存并 revert
         // 这样做比使用 abi.encode 更节省 Gas

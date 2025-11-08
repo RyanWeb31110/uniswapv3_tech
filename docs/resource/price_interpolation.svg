@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
+  <!-- 定义样式 -->
+  <defs>
+    <style>
+      .axis { stroke: #333; stroke-width: 2; fill: none; }
+      .grid { stroke: #ddd; stroke-width: 1; stroke-dasharray: 5,5; }
+      .line { stroke: #4CAF50; stroke-width: 2; fill: none; stroke-dasharray: 5,5; }
+      .point { fill: #2196F3; }
+      .target-point { fill: #FF5722; }
+      .label { font-family: Arial, sans-serif; font-size: 14px; fill: #333; }
+      .label-small { font-family: Arial, sans-serif; font-size: 12px; fill: #666; }
+      .arrow { stroke: #333; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead); }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#333" />
+    </marker>
+  </defs>
+
+  <!-- 坐标轴 -->
+  <line x1="50" y1="350" x2="550" y2="350" class="axis" />
+  <line x1="50" y1="350" x2="50" y2="50" class="axis" />
+
+  <!-- 箭头 -->
+  <line x1="550" y1="350" x2="570" y2="350" class="arrow" />
+  <line x1="50" y1="50" x2="50" y2="30" class="arrow" />
+
+  <!-- 轴标签 -->
+  <text x="560" y="370" class="label">时间</text>
+  <text x="10" y="50" class="label">价格</text>
+
+  <!-- 网格线 -->
+  <line x1="150" y1="350" x2="150" y2="50" class="grid" />
+  <line x1="350" y1="350" x2="350" y2="50" class="grid" />
+  <line x1="450" y1="350" x2="450" y2="50" class="grid" />
+
+  <!-- 时间轴刻度 -->
+  <line x1="150" y1="350" x2="150" y2="355" class="axis" />
+  <line x1="350" y1="350" x2="350" y2="355" class="axis" />
+  <line x1="450" y1="350" x2="450" y2="355" class="axis" />
+
+  <text x="135" y="375" class="label-small">t_before</text>
+  <text x="335" y="375" class="label-small">t_target</text>
+  <text x="440" y="375" class="label-small">t_after</text>
+
+  <!-- 观测点 A (beforeOrAt) -->
+  <circle cx="150" cy="250" r="8" class="point" />
+  <text x="120" y="245" class="label" font-weight="bold">A</text>
+
+  <!-- 观测点 B (atOrAfter) -->
+  <circle cx="450" cy="150" r="8" class="point" />
+  <text x="465" y="155" class="label" font-weight="bold">B</text>
+
+  <!-- 插值线 (A 到 B 的直线) -->
+  <line x1="150" y1="250" x2="450" y2="150" class="line" stroke-dasharray="0" />
+
+  <!-- Target 点 (在 A 和 B 之间的直线上) -->
+  <circle cx="350" cy="183.33" r="8" class="target-point" />
+  <text x="360" y="178" class="label" font-weight="bold" fill="#FF5722">Target</text>
+
+  <!-- 辅助虚线：从 Target 到时间轴 -->
+  <line x1="350" y1="183.33" x2="350" y2="350" class="grid" stroke="#FF5722" />
+
+  <!-- 辅助虚线：从 A 到时间轴 -->
+  <line x1="150" y1="250" x2="150" y2="350" class="grid" stroke="#2196F3" />
+
+  <!-- 辅助虚线：从 B 到时间轴 -->
+  <line x1="450" y1="150" x2="450" y2="350" class="grid" stroke="#2196F3" />
+
+  <!-- 价格标注 -->
+  <text x="55" y="255" class="label-small" fill="#2196F3">P_A</text>
+  <text x="55" y="155" class="label-small" fill="#2196F3">P_B</text>
+  <text x="55" y="188" class="label-small" fill="#FF5722">P_target</text>
+
+  <!-- 说明文字 -->
+  <text x="150" y="30" class="label-small" fill="#4CAF50">插值线: P_target 在 A 和 B 之间的线性插值</text>
+
+  <!-- 公式说明 -->
+  <rect x="60" y="80" width="280" height="60" fill="#f5f5f5" stroke="#999" stroke-width="1" rx="5" />
+  <text x="70" y="100" class="label-small">线性插值公式:</text>
+  <text x="70" y="120" class="label-small" font-family="monospace">P_target = P_A + (P_B - P_A) × </text>
+  <text x="70" y="135" class="label-small" font-family="monospace">           (t_target - t_before) / (t_after - t_before)</text>
+</svg>

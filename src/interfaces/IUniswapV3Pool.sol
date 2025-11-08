@@ -11,6 +11,9 @@ interface IUniswapV3Pool {
     struct Slot0 {
         uint160 sqrtPriceX96; // 当前价格的平方根（Q64.96 格式）
         int24 tick;          // 当前价格对应的 Tick
+        uint16 observationIndex; // 最新观测索引
+        uint16 observationCardinality; // 当前基数
+        uint16 observationCardinalityNext; // 目标基数
         uint8 feeProtocol;   // 协议费用比例
     }
 
@@ -25,8 +28,18 @@ interface IUniswapV3Pool {
     /// @notice 获取池子的当前状态
     /// @return sqrtPriceX96 当前价格的平方根
     /// @return tick 当前价格对应的 Tick
+    /// @return observationIndex 最新观测索引
+    /// @return observationCardinality 当前基数
+    /// @return observationCardinalityNext 目标基数
     /// @return feeProtocol 协议费用比例
-    function slot0() external view returns (uint160 sqrtPriceX96, int24 tick, uint8 feeProtocol);
+    function slot0() external view returns (
+        uint160 sqrtPriceX96,
+        int24 tick,
+        uint16 observationIndex,
+        uint16 observationCardinality,
+        uint16 observationCardinalityNext,
+        uint8 feeProtocol
+    );
 
     /// @notice 获取累积的协议费用
     /// @return token0 累积的 token0 协议费用

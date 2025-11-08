@@ -85,7 +85,7 @@ contract UniswapV3Manager {
         UniswapV3Pool pool = UniswapV3Pool(params.poolAddress);
 
         // 获取当前价格
-        (uint160 sqrtPriceX96, , ) = pool.slot0();
+        (uint160 sqrtPriceX96, , , , , ) = pool.slot0();
 
         // 计算价格区间的平方根价格
         uint160 sqrtPriceLowerX96 = TickMath.getSqrtRatioAtTick(params.lowerTick);

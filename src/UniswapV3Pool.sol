@@ -8,6 +8,7 @@ import "./lib/Math.sol";
 import "./lib/TickMath.sol";
 import "./lib/SwapMath.sol";
 import "./lib/LiquidityMath.sol";
+import "./lib/Oracle.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IUniswapV3MintCallback.sol";
 import "./interfaces/IUniswapV3SwapCallback.sol";
@@ -24,6 +25,7 @@ contract UniswapV3Pool {
     using Position for mapping(bytes32 => Position.Info);
     using Position for Position.Info;
     using TickBitmap for mapping(int16 => uint256);
+    using Oracle for Oracle.Observation[65535];
 
     // ============ 数据结构 ============
 
@@ -97,6 +99,9 @@ contract UniswapV3Pool {
     struct Slot0 {
         uint160 sqrtPriceX96; // 当前平方根价格（Q64.96 格式）
         int24 tick; // 当前 Tick
+        uint16 observationIndex; // 最新观测索引
+        uint16 observationCardinality; // 当前基数
+        uint16 observationCardinalityNext; // 目标基数
         /// @notice 协议费用比例,表示为整数分母 (1/x)
         /// @dev 存储方式: token0 的费用比例和 token1 的费用比例打包在一个 uint8 中
         /// feeProtocol % 16 = token0 的协议费用比例
@@ -135,6 +140,10 @@ contract UniswapV3Pool {
 
     /// @notice 刻度位图索引
     mapping(int16 => uint256) public tickBitmap;
+
+    /// @notice 观测值数组
+    /// @dev 最多可以存储 65,535 个历史观测值
+    Oracle.Observation[65535] public observations;
 
     // ============ 错误定义 ============
 
@@ -219,6 +228,12 @@ contract UniswapV3Pool {
         uint128 amount1
     );
 
+    /// @notice 增加观测容量事件
+    event IncreaseObservationCardinalityNext(
+        uint16 observationCardinalityNextOld,
+        uint16 observationCardinalityNextNew
+    );
+
     // ============ 构造函数 ============
 
     /// @notice 创建新的交易池
@@ -242,8 +257,20 @@ contract UniswapV3Pool {
         // 根据价格计算对应的 tick
         int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
 
+        // 初始化观测数组
+        (uint16 cardinality, uint16 cardinalityNext) = observations.initialize(
+            _blockTimestamp()
+        );
+
         // 设置初始状态（协议费用默认为 0，即未启用）
-        slot0 = Slot0({sqrtPriceX96: sqrtPriceX96, tick: tick, feeProtocol: 0});
+        slot0 = Slot0({
+            sqrtPriceX96: sqrtPriceX96,
+            tick: tick,
+            observationIndex: 0,
+            observationCardinality: cardinality,
+            observationCardinalityNext: cardinalityNext,
+            feeProtocol: 0
+        });
     }
 
     /// @notice 在指定价格区间添加流动性
@@ -297,6 +324,12 @@ contract UniswapV3Pool {
     }
 
     // ============ 内部函数 ============
+
+    /// @notice 获取当前区块时间戳
+    /// @return timestamp 当前区块时间戳（转换为 uint32）
+    function _blockTimestamp() internal view returns (uint32 timestamp) {
+        timestamp = uint32(block.timestamp);
+    }
 
     /// @notice 查询池子的 token0 余额
     function balance0() internal view returns (uint256 balance) {
@@ -459,9 +492,35 @@ contract UniswapV3Pool {
             }
         }
 
-        // 更新池子状态
+        // 更新池子状态和观测值
         if (state.tick != slot0_.tick) {
-            (slot0.sqrtPriceX96, slot0.tick) = (state.sqrtPriceX96, state.tick);
+            // 写入新观测值（记录交换前的价格）
+            (
+                uint16 observationIndex,
+                uint16 observationCardinality
+            ) = observations.write(
+                    slot0_.observationIndex,
+                    _blockTimestamp(),
+                    slot0_.tick,  // ⚠️ 注意：是交换前的 tick
+                    slot0_.observationCardinality,
+                    slot0_.observationCardinalityNext
+                );
+
+            // 更新状态
+            (
+                slot0.sqrtPriceX96,
+                slot0.tick,
+                slot0.observationIndex,
+                slot0.observationCardinality
+            ) = (
+                state.sqrtPriceX96,
+                state.tick,
+                observationIndex,
+                observationCardinality
+            );
+        } else {
+            // 价格没有变化，只更新价格（可能在同一 tick 内微调）
+            slot0.sqrtPriceX96 = state.sqrtPriceX96;
         }
 
         // 更新全局流动性变量
@@ -757,6 +816,45 @@ contract UniswapV3Pool {
         }
 
         emit CollectProtocol(msg.sender, recipient, amount0, amount1);
+    }
+
+    /// @notice 查询多个时间点的观测值
+    /// @dev 用于计算时间加权平均价格（TWAP）
+    /// @param secondsAgos 请求的时间点数组（距今多少秒前）
+    /// @return tickCumulatives 累计 Tick 值数组
+    function observe(uint32[] calldata secondsAgos)
+        public
+        view
+        returns (int56[] memory tickCumulatives)
+    {
+        return observations.observe(
+            _blockTimestamp(),
+            secondsAgos,
+            slot0.tick,
+            slot0.observationIndex,
+            slot0.observationCardinality
+        );
+    }
+
+    /// @notice 增加观测数组容量
+    /// @dev 任何人都可以支付 gas 来扩展观测数组
+    /// @param observationCardinalityNext 目标基数
+    function increaseObservationCardinalityNext(
+        uint16 observationCardinalityNext
+    ) public {
+        uint16 observationCardinalityNextOld = slot0.observationCardinalityNext;
+        uint16 observationCardinalityNextNew = observations.grow(
+            observationCardinalityNextOld,
+            observationCardinalityNext
+        );
+
+        if (observationCardinalityNextNew != observationCardinalityNextOld) {
+            slot0.observationCardinalityNext = observationCardinalityNextNew;
+            emit IncreaseObservationCardinalityNext(
+                observationCardinalityNextOld,
+                observationCardinalityNextNew
+            );
+        }
     }
 
     /// @notice 修改仓位流动性的内部函数
