@@ -114,4 +114,48 @@ interface IUniswapV3Pool {
         uint128 amount0Requested,
         uint128 amount1Requested
     ) external returns (uint128 amount0, uint128 amount1);
+
+    /// @notice 添加流动性
+    /// @param recipient 接收流动性的地址
+    /// @param lowerTick 价格区间下限
+    /// @param upperTick 价格区间上限
+    /// @param amount 流动性数量
+    /// @param data 传递给回调函数的数据
+    /// @return amount0 实际投入的 token0 数量
+    /// @return amount1 实际投入的 token1 数量
+    function mint(
+        address recipient,
+        int24 lowerTick,
+        int24 upperTick,
+        uint128 amount,
+        bytes calldata data
+    ) external returns (uint256 amount0, uint256 amount1);
+
+    /// @notice 移除流动性
+    /// @param lowerTick 价格区间下限
+    /// @param upperTick 价格区间上限
+    /// @param amount 要移除的流动性数量
+    /// @return amount0 移除的 token0 数量
+    /// @return amount1 移除的 token1 数量
+    function burn(
+        int24 lowerTick,
+        int24 upperTick,
+        uint128 amount
+    ) external returns (uint256 amount0, uint256 amount1);
+
+    /// @notice 收取代币
+    /// @param recipient 接收代币的地址
+    /// @param lowerTick 价格区间下限
+    /// @param upperTick 价格区间上限
+    /// @param amount0Requested 请求的 token0 数量
+    /// @param amount1Requested 请求的 token1 数量
+    /// @return amount0 实际收取的 token0 数量
+    /// @return amount1 实际收取的 token1 数量
+    function collect(
+        address recipient,
+        int24 lowerTick,
+        int24 upperTick,
+        uint128 amount0Requested,
+        uint128 amount1Requested
+    ) external returns (uint128 amount0, uint128 amount1);
 }
