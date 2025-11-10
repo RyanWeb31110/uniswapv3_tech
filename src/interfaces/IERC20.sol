@@ -4,6 +4,10 @@ pragma solidity ^0.8.14;
 /// @title ERC20 接口
 /// @notice 简化的 ERC20 接口，仅包含本项目需要的函数
 interface IERC20 {
+    /// @notice 查询代币符号
+    /// @return 代币符号字符串
+    function symbol() external view returns (string memory);
+
     /// @notice 查询账户余额
     /// @param account 要查询的账户地址
     /// @return 账户的代币余额

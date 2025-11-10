@@ -80,6 +80,10 @@ interface IUniswapV3Pool {
     /// @notice 获取 token1 地址
     function token1() external view returns (address);
 
+    /// @notice 获取池子的费率档位
+    /// @return 费率档位（500 = 0.05%、3000 = 0.3%、10000 = 1%）
+    function fee() external view returns (uint24);
+
     /// @notice 获取指定仓位的信息
     /// @param key 仓位键（keccak256(owner, lowerTick, upperTick)）
     /// @return liquidity 流动性数量

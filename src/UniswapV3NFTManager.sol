@@ -7,6 +7,7 @@ import "./interfaces/IERC20.sol";
 import "./lib/TickMath.sol";
 import "./lib/LiquidityAmounts.sol";
 import "./lib/PoolAddress.sol";
+import "./lib/NFTRenderer.sol";
 
 /// @title Uniswap V3 NFT 仓位管理器
 /// @notice 将流动性仓位封装为 ERC721 NFT
@@ -248,15 +249,33 @@ contract UniswapV3NFTManager is ERC721 {
 
     // ============ ERC721 元数据 ============
 
-    /// @notice 返回代币的元数据 URI
-    /// @dev 暂时返回空字符串，后续章节实现链上 SVG
+    /// @notice 返回 NFT 的元数据 URI
+    /// @dev 生成链上 SVG 图像和 JSON 元数据
+    /// @param tokenId NFT ID
+    /// @return 完整的 Data URI（Base64 编码的 JSON）
     function tokenURI(uint256 tokenId)
         public
         view
         override
         returns (string memory)
     {
-        return "";
+        // 步骤 1: 获取仓位信息
+        TokenPosition memory tokenPosition = positions[tokenId];
+        if (tokenPosition.pool == address(0x00)) revert WrongToken();
+
+        // 步骤 2: 获取池子合约
+        IUniswapV3Pool pool = IUniswapV3Pool(tokenPosition.pool);
+
+        // 步骤 3: 调用渲染器生成 Data URI
+        return NFTRenderer.render(
+            NFTRenderer.RenderParams({
+                pool: tokenPosition.pool,
+                owner: address(this),        // NFT 管理合约地址
+                lowerTick: tokenPosition.lowerTick,
+                upperTick: tokenPosition.upperTick,
+                fee: pool.fee()
+            })
+        );
     }
 
     // ============ 内部辅助函数 ============
